@@ -1,4 +1,4 @@
-#include "Hooks.h"
+﻿#include "Hooks.h"
 #include "InputEventHandler.h"
 #include "Prisma.h"
 
@@ -21,7 +21,7 @@ bool OnInput(RE::InputEvent* event) {
     auto button = event->AsButtonEvent();
     if (!button) return false;
     if (!button->IsDown()) return false;
-    if (button->GetIDCode() == RE::BSWin32KeyboardDevice::Keys::kF2) {
+    if (button->GetIDCode() == RE::BSWin32KeyboardDevice::Keys::kF6) {
         if (Prisma::IsHidden()) {
             Prisma::Show();
         } else {

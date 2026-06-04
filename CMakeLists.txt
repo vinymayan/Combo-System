@@ -22,9 +22,9 @@ add_include_folder(vendor/include)
 
 
 cmake_minimum_required(VERSION 3.21)
-set(AUTHOR_NAME "AUTHOR_NAME")
-set(PRODUCT_NAME "PluginName")
-set(BEAUTIFUL_NAME "Plugin Name")
+set(AUTHOR_NAME "Viny")
+set(PRODUCT_NAME "ComboCount")
+set(BEAUTIFUL_NAME "Combo Count")
 
 project(${PRODUCT_NAME} VERSION 3.0.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
