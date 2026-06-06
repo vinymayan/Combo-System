@@ -22,11 +22,9 @@ namespace Sink {
         return HitType::NormalAttack;
     }
 
-    void ComboManager::RegisterHit(RE::Actor* attacker, const RE::TESHitEvent* a_event) {
-        if (!attacker) return;
+    void ComboManager::RegisterHit(RE::FormID attackerFormID, HitType currentHitType) {
+        if (!attackerFormID) return;
 
-        auto formID = attacker->GetFormID();
-        HitType currentHitType = DetermineHitType(a_event);
         int pointsGained = 10;
         ActorComboData dataCopy;
 
@@ -34,7 +32,7 @@ namespace Sink {
 
         {
             std::unique_lock lock(_mutex);
-            auto& data = _registry[formID];
+            auto& data = _registry[attackerFormID];
             data.hitValue += 1;
 
             if (data.lastHitType == currentHitType) {
@@ -51,22 +49,24 @@ namespace Sink {
             dataCopy = data;
         }
 
-        // OPERAÇÃO SEGURA: Registra no log apenas tipos primitivos numéricos na thread de física
-        SKSE::log::debug("ComboManager::RegisterHit - Atacante FormID: {:X}, Hit: {}, Combo: {}", formID, dataCopy.hitValue, dataCopy.comboValue);
-        UpdateGraphVariables(attacker, dataCopy);
+        UpdateGraphVariables(attackerFormID, dataCopy);
 
-        // CORREÇÃO: Captura apenas o formID (uint32_t) por valor, evitando CreateRefHandle() em background
-        Utils::DelayedDispatcher::Get().PostDelayed(std::chrono::seconds(20), [this, formID, nowTime]() {
+        Utils::DelayedDispatcher::Get().PostDelayed(std::chrono::seconds(20), [this, attackerFormID, nowTime]() {
             // Executa a verificação e limpeza síncrona diretamente na Thread Principal do Skyrim
-            SKSE::GetTaskInterface()->AddTask([this, formID, nowTime]() {
-                auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(formID);
-                if (!actorPtr) return;
+            SKSE::GetTaskInterface()->AddTask([this, attackerFormID, nowTime]() {
+                auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(attackerFormID);
+                if (!actorPtr || actorPtr->IsDead() || !actorPtr->Is3DLoaded()) {
+                    if (attackerFormID == 0x14) {
+                        Prisma::UpdateCombo(0, 0);
+                    }
+                    return;
+                }
 
                 bool shouldReset = false;
 
                 {
                     std::unique_lock lock(_mutex);
-                    auto it = _registry.find(formID);
+                    auto it = _registry.find(attackerFormID);
                     if (it != _registry.end() && it->second.lastHitTime == nowTime) {
                         _registry.erase(it);
                         shouldReset = true;
@@ -74,13 +74,10 @@ namespace Sink {
                 }
 
                 if (shouldReset) {
-                    SKSE::log::debug("ComboManager::DelayedDispatcher - Tempo esgotado! Resetando combo global de: {}", actorPtr->GetName());
-
-                    // Modificações de animação executadas com segurança na Main Thread
                     actorPtr->SetGraphVariableInt("HitValueCMF", 0);
                     actorPtr->SetGraphVariableInt("ComboValueCMF", 0);
 
-                    if (actorPtr->IsPlayer() || formID == 0x14) {
+                    if (actorPtr->IsPlayerRef() || attackerFormID == 0x14) {
                         Prisma::UpdateCombo(0, 0);
                     }
                 }
@@ -88,16 +85,15 @@ namespace Sink {
             });
     }
 
-    void ComboManager::RegisterGetHit(RE::Actor* target) {
-        if (!target) return;
+    void ComboManager::RegisterGetHit(RE::FormID targetFormID) {
+        if (!targetFormID) return;
 
-        auto formID = target->GetFormID();
         bool found = false;
         ActorComboData dataCopy;
 
         {
             std::unique_lock lock(_mutex);
-            auto it = _registry.find(formID);
+            auto it = _registry.find(targetFormID);
             if (it != _registry.end()) {
                 auto& data = it->second;
                 data.comboValue -= 15;
@@ -109,19 +105,17 @@ namespace Sink {
         }
 
         if (found) {
-            SKSE::log::debug("ComboManager::RegisterGetHit - Combo reduzido -> Alvo FormID: {:X}, Hit: {}, Combo: {}", formID, dataCopy.hitValue, dataCopy.comboValue);
-            UpdateGraphVariables(target, dataCopy);
+            UpdateGraphVariables(targetFormID, dataCopy);
         }
     }
 
-    void ComboManager::RemoveActor(RE::Actor* actor) {
-        if (!actor) return;
-        auto formID = actor->GetFormID();
+    void ComboManager::RemoveActor(RE::FormID actorFormID) {
+        if (!actorFormID) return;
 
         bool erased = false;
         {
             std::unique_lock lock(_mutex);
-            auto it = _registry.find(formID);
+            auto it = _registry.find(actorFormID);
             if (it != _registry.end()) {
                 _registry.erase(it);
                 erased = true;
@@ -129,38 +123,39 @@ namespace Sink {
         }
 
         if (erased) {
-            SKSE::log::debug("ComboManager::RemoveActor - Forçado via comando. Actor {:X} resetado.", formID);
+            auto actor = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
+            if (!actor || actor->IsDead() || !actor->Is3DLoaded()) {
+                if (actorFormID == 0x14) {
+                    Prisma::UpdateCombo(0, 0);
+                }
+                return;
+            }
 
-            // Como RemoveActor já é invocado de uma Task na Main Thread através da UI, limpa diretamente
             actor->SetGraphVariableInt("HitValueCMF", 0);
             actor->SetGraphVariableInt("ComboValueCMF", 0);
 
-            if (actor->IsPlayer() || formID == 0x14) {
+            if (actor->IsPlayerRef() || actorFormID == 0x14) {
                 Prisma::UpdateCombo(0, 0);
             }
         }
     }
 
-    void ComboManager::UpdateGraphVariables(RE::Actor* actor, const ActorComboData& data) {
-        if (!actor) return;
+    void ComboManager::UpdateGraphVariables(RE::FormID actorFormID, const ActorComboData& data) {
+        if (!actorFormID) return;
 
-        auto formID = actor->GetFormID();
         int hitVal = data.hitValue;
         int comboVal = data.comboValue;
 
         // Passa apenas o FormID e as propriedades numéricas para a task
-        SKSE::GetTaskInterface()->AddTask([formID, hitVal, comboVal]() {
+        SKSE::GetTaskInterface()->AddTask([actorFormID, hitVal, comboVal]() {
             // Realiza o Lookup de forma síncrona e isolada na Thread Principal
-            auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(formID);
-            if (!actorPtr || actorPtr->IsDead()) return;
-
-            // Aqui dentro estamos na Main Thread! É 100% seguro chamar actorPtr->GetName() e ler strings!
-            SKSE::log::debug("ComboManager::UpdateGraphVariables - Atualizando Anim Graph para: {}, Hit: {}, Combo: {}", actorPtr->GetName(), hitVal, comboVal);
+            auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
+            if (!actorPtr || actorPtr->IsDead() || !actorPtr->Is3DLoaded()) return;
 
             actorPtr->SetGraphVariableInt("HitValueCMF", hitVal);
             actorPtr->SetGraphVariableInt("ComboValueCMF", comboVal);
 
-            if (actorPtr->IsPlayer() || formID == 0x14) {
+            if (actorPtr->IsPlayerRef() || actorFormID == 0x14) {
                 Prisma::UpdateCombo(hitVal, comboVal);
             }
             });
@@ -171,17 +166,33 @@ namespace Sink {
         if (!a_event || !a_event->cause || !a_event->target) {
             return RE::BSEventNotifyControl::kContinue;
         }
-
-        auto* target = a_event->target.get()->As<RE::Actor>();
-        auto* attacker = a_event->cause.get()->As<RE::Actor>();
-
-        if (attacker && !attacker->IsDead() && target && !target->IsDead()) {
-            ComboManager::GetSingleton()->RegisterHit(attacker, a_event);
+        
+        auto targetRef = a_event->target.get();
+        if (!targetRef) {
+            return RE::BSEventNotifyControl::kContinue;
         }
 
-        if (target && !target->IsDead()) {
-            ComboManager::GetSingleton()->RegisterGetHit(target);
+        auto* target = targetRef->As<RE::Actor>();
+        if (!target) {
+            return RE::BSEventNotifyControl::kContinue;
         }
+
+
+        const auto targetFormID = target->GetFormID();
+        RE::FormID attackerFormID = 0;
+        if (auto causeRef = a_event->cause.get()) {
+            if (auto* attacker = causeRef->As<RE::Actor>()) {
+                attackerFormID = attacker->GetFormID();
+                SKSE::log::debug("Hit disparado por actor: FormID [0x{:08X}], Nome: '{}'", attackerFormID, attacker->GetName());
+            }
+        }
+        const auto hitType = ComboManager::GetSingleton()->DetermineHitType(a_event);
+
+        if (attackerFormID) {
+            ComboManager::GetSingleton()->RegisterHit(attackerFormID, hitType);
+        }
+
+        ComboManager::GetSingleton()->RegisterGetHit(targetFormID);
 
         return RE::BSEventNotifyControl::kContinue;
     }

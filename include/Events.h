@@ -28,25 +28,26 @@ namespace Sink {
         }
 
         // Registra o acerto feito por um atacante (aumenta combo)
-        void RegisterHit(RE::Actor* attacker, const RE::TESHitEvent* a_event);
+        void RegisterHit(RE::FormID attackerFormID, HitType hitType);
 
         // Registra o dano recebido por um alvo (diminui combo)
-        void RegisterGetHit(RE::Actor* target);
+        void RegisterGetHit(RE::FormID targetFormID);
 
         // Remove o actor do banco (Reset total)
-        void RemoveActor(RE::Actor* actor);
-
+        void RemoveActor(RE::FormID actorFormID);
+        // Identifica o tipo de hit baseado no evento
+        HitType DetermineHitType(const RE::TESHitEvent* a_event);
     private:
         ComboManager() = default;
 
         std::unordered_map<RE::FormID, ActorComboData> _registry;
         std::shared_mutex _mutex;
 
-        // Identifica o tipo de hit baseado no evento
-        HitType DetermineHitType(const RE::TESHitEvent* a_event);
+
+
 
         // Atualiza as variáveis diretamente no Graph do Skyrim
-        void UpdateGraphVariables(RE::Actor* actor, const ActorComboData& data);
+        void UpdateGraphVariables(RE::FormID actorFormID, const ActorComboData& data);
     };
 
     class HitEventHandler : public RE::BSTEventSink<RE::TESHitEvent> {

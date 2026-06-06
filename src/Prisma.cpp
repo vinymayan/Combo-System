@@ -45,7 +45,7 @@ void Prisma::Show() {
                 SKSE::GetTaskInterface()->AddTask([]() {
                     auto player = RE::PlayerCharacter::GetSingleton();
                     if (player) {
-                        Sink::ComboManager::GetSingleton()->RemoveActor(player);
+                        Sink::ComboManager::GetSingleton()->RemoveActor(player->GetFormID());
                     }
                     });
                 });
@@ -65,11 +65,9 @@ void Prisma::Hide() {
 
 bool Prisma::IsHidden() { return PrismaUI->IsHidden(view); }
 
-// Em Prisma.cpp
 void Prisma::UpdateCombo(int hitValue, int comboValue) {
     if (!PrismaUI || !view) return;
 
-    // CORREÇÃO: Alocação estática para impedir que a string seja destruída ao sair da função
     static std::string payload;
     payload = std::to_string(hitValue) + "|" + std::to_string(comboValue);
 	logger::debug("Prisma::UpdateCombo - Enviando atualização para a UI -> Hit: {}, Combo: {}, Payload: {}", hitValue, comboValue, payload);
