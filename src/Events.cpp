@@ -41,6 +41,18 @@ namespace Sink {
         }
 
         void ApplyTierProgression(ActorComboData& data, const Settings::ComboProfileSettings& profile) {
+            while (data.comboValue > 0 && data.comboPoints < 0) {
+                const int previousTier = data.comboValue - 1;
+                const auto& previousSettings = GetTierSettings(profile, previousTier);
+                data.comboPoints += std::max(1, previousSettings.pointsPerTier);
+                data.comboValue = previousTier;
+            }
+
+            if (data.comboValue <= 0 && data.comboPoints < 0) {
+                data.comboValue = 0;
+                data.comboPoints = 0;
+            }
+
             while (data.comboValue < kMaxComboTier) {
                 const auto& settings = GetTierSettings(profile, data.comboValue);
                 const int pointsPerTier = std::max(1, settings.pointsPerTier);
@@ -95,6 +107,31 @@ namespace Sink {
             if (eventName == "HitByUnblockAtk") return settings.hitByUnblockablePoints;
             if (eventName == "SBF_StaggerStart") return settings.staggerStartPoints;
             return 0;
+        }
+
+        const char* GetAnimationEventLabel(std::string_view eventName) {
+            if (eventName == "DodgedCMF") return "Dodge";
+            if (eventName == "PerfDodgedCMF") return "Perfect Dodge";
+            if (eventName == "GotDodgedCMF") return "Dodged";
+            if (eventName == "GotPerfDodgeCMF") return "Perfect Dodged";
+            if (eventName == "ParriedCMF") return "Parry";
+            if (eventName == "PerfParriedCMF") return "Perfect Parry";
+            if (eventName == "GotParriedCMF") return "Parried";
+            if (eventName == "GotPerfParriedCMF") return "Perfect Parried";
+            if (eventName == "UndodgeableHitCMF") return "Undodgeable";
+            if (eventName == "HitByUndodgeableAtk") return "Undodgeable Hit";
+            if (eventName == "UnblockableHitCMF") return "Unblockable";
+            if (eventName == "HitByUnblockAtk") return "Unblockable Hit";
+            if (eventName == "SBF_StaggerStart") return "Stagger";
+            return "Combo";
+        }
+
+        void ShowPlayerComboMessage(RE::FormID actorFormID, const std::string& label, int pointsDelta) {
+            if (actorFormID == 0x14 && Settings::PlayerUI.showFloatingMessages && pointsDelta != 0) {
+                SKSE::GetTaskInterface()->AddTask([label, pointsDelta]() {
+                    Prisma::ShowComboMessage(label, pointsDelta);
+                });
+            }
         }
     }
 
@@ -161,6 +198,7 @@ namespace Sink {
         }
 
         UpdateGraphVariables(attackerFormID, dataCopy);
+        ShowPlayerComboMessage(attackerFormID, "Hit", pointsGained);
 
         if (expireSeconds > 0) {
             Utils::DelayedDispatcher::Get().PostDelayed(std::chrono::seconds(expireSeconds), [this, attackerFormID, nowTime]() {
@@ -203,6 +241,7 @@ namespace Sink {
 
         bool found = false;
         ActorComboData dataCopy;
+        int pointsLost = 0;
 
         {
             std::unique_lock lock(_mutex);
@@ -211,7 +250,9 @@ namespace Sink {
                 auto& data = it->second;
                 const auto& profile = GetProfileForActor(targetFormID);
                 const auto& tierSettings = GetTierSettings(profile, data.comboValue);
-                data.comboPoints = std::max(0, data.comboPoints - tierSettings.getHitPenalty);
+                pointsLost = tierSettings.getHitPenalty;
+                data.comboPoints -= pointsLost;
+                ApplyTierProgression(data, profile);
 
                 dataCopy = data;
                 found = true;
@@ -220,6 +261,7 @@ namespace Sink {
 
         if (found) {
             UpdateGraphVariables(targetFormID, dataCopy);
+            ShowPlayerComboMessage(targetFormID, "Hit Taken", -pointsLost);
         }
     }
 
@@ -236,7 +278,7 @@ namespace Sink {
         {
             std::unique_lock lock(_mutex);
             auto& data = _registry[actorFormID];
-            data.comboPoints = std::max(0, data.comboPoints + pointsDelta);
+            data.comboPoints += pointsDelta;
             data.lastHitTime = nowTime;
             data.decayAccumulator = 0.0f;
             ApplyTierProgression(data, profile);
@@ -278,6 +320,7 @@ namespace Sink {
         const int pointsDelta = GetAnimationEventDelta(eventName, GetTierSettings(profile, currentTier));
         if (pointsDelta != 0) {
             AdjustCombo(actorFormID, pointsDelta);
+            ShowPlayerComboMessage(actorFormID, GetAnimationEventLabel(eventName), pointsDelta);
         }
     }
 
@@ -349,7 +392,7 @@ namespace Sink {
             for (auto& [actorFormID, data] : _registry) {
                 const auto& profile = GetProfileForActor(actorFormID);
                 const auto& settings = GetTierSettings(profile, data.comboValue);
-                if (!settings.losePointsPerSecond || settings.pointsLostPerSecond <= 0 || data.comboPoints <= 0) {
+                if (!settings.losePointsPerSecond || settings.pointsLostPerSecond <= 0 || (data.comboValue <= 0 && data.comboPoints <= 0)) {
                     continue;
                 }
 
@@ -360,7 +403,8 @@ namespace Sink {
                 }
 
                 data.decayAccumulator -= static_cast<float>(pointsToLose);
-                data.comboPoints = std::max(0, data.comboPoints - pointsToLose);
+                data.comboPoints -= pointsToLose;
+                ApplyTierProgression(data, profile);
                 changedActors.emplace_back(actorFormID, data);
             }
         }

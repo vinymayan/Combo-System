@@ -1,9 +1,79 @@
 ﻿#include "Prisma.h"
 #include "PrismaUI_API.h"
+#include "Configuration.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 #include <string>
 #include "Events.h"
 PRISMA_UI_API::IVPrismaUI1* PrismaUI = nullptr;
 static PrismaView view;
+
+namespace {
+    std::string BuildUISettingsPayload() {
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+
+        writer.StartObject();
+        writer.Key("editMode");
+        writer.Bool(Settings::PlayerUI.editMode);
+        writer.Key("useTierImages");
+        writer.Bool(Settings::PlayerUI.useTierImages);
+        writer.Key("useTextProgressFill");
+        writer.Bool(Settings::PlayerUI.useTextProgressFill);
+        writer.Key("showTierName");
+        writer.Bool(Settings::PlayerUI.showTierName);
+        writer.Key("positionXPercent");
+        writer.Int(Settings::PlayerUI.positionXPercent);
+        writer.Key("positionYPercent");
+        writer.Int(Settings::PlayerUI.positionYPercent);
+        writer.Key("scalePercent");
+        writer.Int(Settings::PlayerUI.scalePercent);
+        writer.Key("progressBarWidth");
+        writer.Int(Settings::PlayerUI.progressBarWidth);
+        writer.Key("progressBarHeight");
+        writer.Int(Settings::PlayerUI.progressBarHeight);
+        writer.Key("tiers");
+        writer.StartArray();
+        for (int i = 0; i < Settings::kComboTierCount; i++) {
+            writer.StartObject();
+            writer.Key("letterColor");
+            writer.StartArray();
+            writer.Double(Settings::PlayerUI.tiers[i].letterColor[0]);
+            writer.Double(Settings::PlayerUI.tiers[i].letterColor[1]);
+            writer.Double(Settings::PlayerUI.tiers[i].letterColor[2]);
+            writer.Double(Settings::PlayerUI.tiers[i].letterColor[3]);
+            writer.EndArray();
+            writer.Key("strokeColor");
+            writer.StartArray();
+            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[0]);
+            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[1]);
+            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[2]);
+            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[3]);
+            writer.EndArray();
+            writer.Key("strokeWidth");
+            writer.Int(Settings::PlayerUI.tiers[i].strokeWidth);
+            writer.Key("strokeInside");
+            writer.Bool(Settings::PlayerUI.tiers[i].strokeInside);
+            writer.Key("imagePath");
+            writer.String(Settings::PlayerUI.tiers[i].imagePath.c_str());
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.EndObject();
+
+        return buffer.GetString();
+    }
+
+    void SendUISettingsToPrisma() {
+        if (!PrismaUI || !view) {
+            return;
+        }
+
+        static std::string payload;
+        payload = BuildUISettingsPayload();
+        PrismaUI->InteropCall(view, "updateComboUiSettings", payload.c_str());
+    }
+}
 
 void Prisma::Install() {
     PrismaUI = reinterpret_cast<PRISMA_UI_API::IVPrismaUI1*>(PRISMA_UI_API::RequestPluginAPI());
@@ -18,6 +88,7 @@ void Prisma::Install() {
 
 void Prisma::Preload() {
     Show();
+    ApplyUISettings();
     ResetComboDisplay();
     Hide();
 }
@@ -94,6 +165,38 @@ void Prisma::UpdateCombo(int hitValue, int comboValue, int comboPoints, int poin
     catch (...) {
         SKSE::log::error("Prisma::UpdateCombo - Erro desconhecido fatal interceptado durante o InteropCall!");
     }
+}
+
+void Prisma::ShowComboMessage(const std::string& label, int pointsDelta) {
+    if (!PrismaUI || !view || pointsDelta == 0) return;
+
+    if (PrismaUI->IsHidden(view)) {
+        PrismaUI->Show(view);
+    }
+
+    static std::string payload;
+    payload = label + "|" + std::to_string(pointsDelta);
+    PrismaUI->InteropCall(view, "showComboMessage", payload.c_str());
+}
+
+void Prisma::ApplyUISettings() {
+    if (!PrismaUI) {
+        return;
+    }
+
+    if (!createdView || !view) {
+        if (Settings::PlayerUI.editMode) {
+            Show();
+        } else {
+            return;
+        }
+    }
+
+    if (Settings::PlayerUI.editMode && PrismaUI->IsHidden(view)) {
+        PrismaUI->Show(view);
+    }
+
+    SendUISettingsToPrisma();
 }
 
 void Prisma::ResetComboDisplay() {

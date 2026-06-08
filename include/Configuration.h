@@ -53,6 +53,30 @@ namespace Settings {
         std::array<TierSettings, kComboTierCount> tiers{};
     };
 
+    struct TierVisualSettings {
+        std::array<float, 4> letterColor{ 0.87f, 0.91f, 0.96f, 1.0f };
+        std::array<float, 4> strokeColor{ 0.02f, 0.02f, 0.02f, 1.0f };
+        int strokeWidth = 6;
+        bool strokeInside = false;
+        std::string imagePath;
+    };
+
+    struct PlayerUISettings {
+        bool showFloatingMessages = true;
+        bool editMode = false;
+        bool useTierImages = false;
+        bool useTextProgressFill = false;
+        bool showTierName = true;
+        int positionXPercent = 83;
+        int positionYPercent = 76;
+        int scalePercent = 200;
+        int progressBarWidth = 220;
+        int progressBarHeight = 13;
+        std::array<TierVisualSettings, kComboTierCount> tiers{};
+
+        PlayerUISettings();
+    };
+
     struct ComboRule {
         std::string ruleName = "New Rule";
         RE::FormID perkID = 0;
@@ -61,12 +85,14 @@ namespace Settings {
 
     inline ComboProfileSettings PlayerCombo;
     inline ComboProfileSettings NPCCombo;
+    inline PlayerUISettings PlayerUI;
     inline std::vector<ComboRule> ComboRules;
 }
 
 namespace ModMenu {
     void Register();
     void PlayerRender();
+    void UIRender();
     void NPCRender();
     void RulesRender();
     void LoadSettings();

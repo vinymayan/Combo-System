@@ -1,5 +1,6 @@
 #include "Configuration.h"
 #include "Manager.h"
+#include "Prisma.h"
 
 #include "SKSEMCP/SKSEMenuFramework.hpp"
 #include "rapidjson/prettywriter.h"
@@ -7,7 +8,26 @@
 #include <cstring>
 #include <filesystem>
 
-namespace ImGui = ImGuiMCP;
+namespace Settings {
+    PlayerUISettings::PlayerUISettings() {
+        const std::array<std::array<float, 4>, kComboTierCount> colors{ {
+            { 0.87f, 0.91f, 0.96f, 1.0f },
+            { 0.87f, 0.91f, 0.96f, 1.0f },
+            { 0.87f, 0.91f, 0.96f, 1.0f },
+            { 0.66f, 0.84f, 1.00f, 1.0f },
+            { 0.56f, 0.78f, 1.00f, 1.0f },
+            { 0.44f, 0.72f, 1.00f, 1.0f },
+            { 1.00f, 0.85f, 0.16f, 1.0f },
+            { 1.00f, 0.88f, 0.23f, 1.0f },
+            { 1.00f, 0.94f, 0.30f, 1.0f },
+            { 1.00f, 0.94f, 0.42f, 1.0f }
+        } };
+
+        for (int i = 0; i < kComboTierCount; i++) {
+            tiers[i].letterColor = colors[i];
+        }
+    }
+}
 
 namespace ModMenu {
     constexpr const char* SETTINGS_PATH = "Data/SKSE/Plugins/ComboCount/Settings.json";
@@ -220,6 +240,148 @@ namespace ModMenu {
         parent.AddMember("minHitsForTier", settings.minHitsForTier, alloc);
     }
 
+    static void ClampPlayerUISettings(Settings::PlayerUISettings& settings) {
+        settings.positionXPercent = std::clamp(settings.positionXPercent, 0, 100);
+        settings.positionYPercent = std::clamp(settings.positionYPercent, 0, 100);
+        settings.scalePercent = std::clamp(settings.scalePercent, 40, 300);
+        settings.progressBarWidth = std::clamp(settings.progressBarWidth, 60, 600);
+        settings.progressBarHeight = std::clamp(settings.progressBarHeight, 6, 60);
+        for (auto& tier : settings.tiers) {
+            for (auto& component : tier.letterColor) {
+                component = std::clamp(component, 0.0f, 1.0f);
+            }
+            for (auto& component : tier.strokeColor) {
+                component = std::clamp(component, 0.0f, 1.0f);
+            }
+            tier.strokeWidth = std::clamp(tier.strokeWidth, 0, 24);
+        }
+    }
+
+    static void ReadPlayerUISettings(const rapidjson::Value& parent, Settings::PlayerUISettings& settings) {
+        if (!parent.IsObject()) {
+            return;
+        }
+
+        if (parent.HasMember("showFloatingMessages") && parent["showFloatingMessages"].IsBool()) {
+            settings.showFloatingMessages = parent["showFloatingMessages"].GetBool();
+        }
+        if (parent.HasMember("editMode") && parent["editMode"].IsBool()) {
+            settings.editMode = parent["editMode"].GetBool();
+        }
+        if (parent.HasMember("useTierImages") && parent["useTierImages"].IsBool()) {
+            settings.useTierImages = parent["useTierImages"].GetBool();
+        }
+        if (parent.HasMember("useTextProgressFill") && parent["useTextProgressFill"].IsBool()) {
+            settings.useTextProgressFill = parent["useTextProgressFill"].GetBool();
+        }
+        if (parent.HasMember("showTierName") && parent["showTierName"].IsBool()) {
+            settings.showTierName = parent["showTierName"].GetBool();
+        }
+        if (parent.HasMember("positionXPercent") && parent["positionXPercent"].IsInt()) {
+            settings.positionXPercent = parent["positionXPercent"].GetInt();
+        }
+        if (parent.HasMember("positionYPercent") && parent["positionYPercent"].IsInt()) {
+            settings.positionYPercent = parent["positionYPercent"].GetInt();
+        }
+        if (parent.HasMember("scalePercent") && parent["scalePercent"].IsInt()) {
+            settings.scalePercent = parent["scalePercent"].GetInt();
+        }
+        if (parent.HasMember("progressBarWidth") && parent["progressBarWidth"].IsInt()) {
+            settings.progressBarWidth = parent["progressBarWidth"].GetInt();
+        }
+        if (parent.HasMember("progressBarHeight") && parent["progressBarHeight"].IsInt()) {
+            settings.progressBarHeight = parent["progressBarHeight"].GetInt();
+        }
+
+        if (parent.HasMember("tiers") && parent["tiers"].IsArray()) {
+            int idx = 0;
+            for (const auto& tierValue : parent["tiers"].GetArray()) {
+                if (idx >= Settings::kComboTierCount) {
+                    break;
+                }
+                if (tierValue.IsObject()) {
+                    if (tierValue.HasMember("letterColor") && tierValue["letterColor"].IsArray()) {
+                        int colorIndex = 0;
+                        for (const auto& component : tierValue["letterColor"].GetArray()) {
+                            if (colorIndex >= 4) {
+                                break;
+                            }
+                            if (component.IsNumber()) {
+                                settings.tiers[idx].letterColor[colorIndex] = component.GetFloat();
+                            }
+                            colorIndex++;
+                        }
+                    }
+                    if (tierValue.HasMember("strokeColor") && tierValue["strokeColor"].IsArray()) {
+                        int colorIndex = 0;
+                        for (const auto& component : tierValue["strokeColor"].GetArray()) {
+                            if (colorIndex >= 4) {
+                                break;
+                            }
+                            if (component.IsNumber()) {
+                                settings.tiers[idx].strokeColor[colorIndex] = component.GetFloat();
+                            }
+                            colorIndex++;
+                        }
+                    }
+                    if (tierValue.HasMember("strokeWidth") && tierValue["strokeWidth"].IsInt()) {
+                        settings.tiers[idx].strokeWidth = tierValue["strokeWidth"].GetInt();
+                    }
+                    if (tierValue.HasMember("strokeInside") && tierValue["strokeInside"].IsBool()) {
+                        settings.tiers[idx].strokeInside = tierValue["strokeInside"].GetBool();
+                    }
+                    if (tierValue.HasMember("imagePath") && tierValue["imagePath"].IsString()) {
+                        settings.tiers[idx].imagePath = tierValue["imagePath"].GetString();
+                    }
+                }
+                idx++;
+            }
+        }
+
+        ClampPlayerUISettings(settings);
+    }
+
+    static void WritePlayerUISettings(
+        rapidjson::Value& parent,
+        rapidjson::Document::AllocatorType& alloc,
+        const Settings::PlayerUISettings& settings) {
+        parent.SetObject();
+        parent.AddMember("showFloatingMessages", settings.showFloatingMessages, alloc);
+        parent.AddMember("editMode", settings.editMode, alloc);
+        parent.AddMember("useTierImages", settings.useTierImages, alloc);
+        parent.AddMember("useTextProgressFill", settings.useTextProgressFill, alloc);
+        parent.AddMember("showTierName", settings.showTierName, alloc);
+        parent.AddMember("positionXPercent", settings.positionXPercent, alloc);
+        parent.AddMember("positionYPercent", settings.positionYPercent, alloc);
+        parent.AddMember("scalePercent", settings.scalePercent, alloc);
+        parent.AddMember("progressBarWidth", settings.progressBarWidth, alloc);
+        parent.AddMember("progressBarHeight", settings.progressBarHeight, alloc);
+
+        rapidjson::Value tiers(rapidjson::kArrayType);
+        for (int i = 0; i < Settings::kComboTierCount; i++) {
+            rapidjson::Value tierObj(rapidjson::kObjectType);
+            tierObj.AddMember("name", rapidjson::Value(Settings::ComboTierNames[i], alloc).Move(), alloc);
+
+            rapidjson::Value color(rapidjson::kArrayType);
+            for (float component : settings.tiers[i].letterColor) {
+                color.PushBack(component, alloc);
+            }
+            tierObj.AddMember("letterColor", color, alloc);
+
+            rapidjson::Value strokeColor(rapidjson::kArrayType);
+            for (float component : settings.tiers[i].strokeColor) {
+                strokeColor.PushBack(component, alloc);
+            }
+            tierObj.AddMember("strokeColor", strokeColor, alloc);
+            tierObj.AddMember("strokeWidth", settings.tiers[i].strokeWidth, alloc);
+            tierObj.AddMember("strokeInside", settings.tiers[i].strokeInside, alloc);
+            tierObj.AddMember("imagePath", rapidjson::Value(settings.tiers[i].imagePath.c_str(), alloc).Move(), alloc);
+
+            tiers.PushBack(tierObj, alloc);
+        }
+        parent.AddMember("tiers", tiers, alloc);
+    }
+
     static void ReadProfileSettings(const rapidjson::Value& parent, Settings::ComboProfileSettings& profile) {
         if (!parent.IsObject()) {
             return;
@@ -376,6 +538,87 @@ namespace ModMenu {
         return changed;
     }
 
+    static bool RenderPlayerUISettings() {
+        bool changed = false;
+        auto& ui = Settings::PlayerUI;
+
+        if (ImGui::Checkbox(GetLoc("menu.show_floating_messages", "Show floating combo messages"), &ui.showFloatingMessages)) {
+            changed = true;
+        }
+        if (ImGui::Checkbox(GetLoc("menu.ui_edit_mode", "Combo UI edit mode"), &ui.editMode)) {
+            changed = true;
+        }
+        if (ImGui::Checkbox(GetLoc("menu.use_tier_images", "Use tier images instead of tier text"), &ui.useTierImages)) {
+            changed = true;
+        }
+        if (ImGui::Checkbox(GetLoc("menu.use_text_progress_fill", "Fill tier text instead of showing progress bar"), &ui.useTextProgressFill)) {
+            changed = true;
+        }
+        if (ImGui::Checkbox(GetLoc("menu.show_tier_name", "Show tier name text"), &ui.showTierName)) {
+            changed = true;
+        }
+
+        if (RenderIntSliderWithInput(GetLoc("menu.ui_position_x", "Combo UI horizontal position (%)"), &ui.positionXPercent, 0, 100)) {
+            changed = true;
+        }
+        if (RenderIntSliderWithInput(GetLoc("menu.ui_position_y", "Combo UI vertical position (%)"), &ui.positionYPercent, 0, 100)) {
+            changed = true;
+        }
+        if (RenderIntSliderWithInput(GetLoc("menu.ui_scale", "Combo UI scale (%)"), &ui.scalePercent, 40, 300)) {
+            changed = true;
+        }
+        if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_width", "Progress bar width"), &ui.progressBarWidth, 60, 600)) {
+            changed = true;
+        }
+        if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_height", "Progress bar height"), &ui.progressBarHeight, 6, 60)) {
+            changed = true;
+        }
+
+        if (ImGui::Button(GetLoc("menu.reset_ui_layout", "Reset UI layout"))) {
+            ui.positionXPercent = 83;
+            ui.positionYPercent = 76;
+            ui.scalePercent = 200;
+            ui.progressBarWidth = 220;
+            ui.progressBarHeight = 13;
+            changed = true;
+        }
+
+        ImGui::Separator();
+        for (int i = 0; i < Settings::kComboTierCount; i++) {
+            std::string label = std::string(GetLoc("menu.tier_visual", "Tier Visual")) + " " + Settings::ComboTierNames[i];
+            if (ImGui::CollapsingHeader(label.c_str())) {
+                ImGui::Indent();
+                ImGui::PushID(i);
+
+                if (ImGui::ColorEdit4(GetLoc("menu.tier_letter_color", "Tier letter color"), ui.tiers[i].letterColor.data())) {
+                    changed = true;
+                }
+                if (ImGui::ColorEdit4(GetLoc("menu.tier_stroke_color", "Tier stroke color"), ui.tiers[i].strokeColor.data())) {
+                    changed = true;
+                }
+                if (RenderIntSliderWithInput(GetLoc("menu.tier_stroke_width", "Tier stroke width"), &ui.tiers[i].strokeWidth, 0, 24)) {
+                    changed = true;
+                }
+                if (ImGui::Checkbox(GetLoc("menu.tier_stroke_inside", "Draw stroke inside fill"), &ui.tiers[i].strokeInside)) {
+                    changed = true;
+                }
+
+                char pathBuf[512]{};
+                strcpy_s(pathBuf, ui.tiers[i].imagePath.c_str());
+                if (ImGui::InputText(GetLoc("menu.tier_image_path", "Tier image path"), pathBuf, sizeof(pathBuf))) {
+                    ui.tiers[i].imagePath = pathBuf;
+                    changed = true;
+                }
+
+                ImGui::PopID();
+                ImGui::Unindent();
+            }
+        }
+
+        ClampPlayerUISettings(ui);
+        return changed;
+    }
+
     static void SaveRule(const Settings::ComboRule& rule) {
         std::filesystem::create_directories(RULES_DIR);
 
@@ -487,6 +730,12 @@ namespace ModMenu {
         if (doc.HasMember("npc")) {
             ReadProfileSettingsFromSavedValue(doc["npc"], Settings::NPCCombo);
         }
+        if (doc.HasMember("playerUI")) {
+            ReadPlayerUISettings(doc["playerUI"], Settings::PlayerUI);
+        }
+        if (doc.HasMember("showFloatingMessages") && doc["showFloatingMessages"].IsBool()) {
+            Settings::PlayerUI.showFloatingMessages = doc["showFloatingMessages"].GetBool();
+        }
 
         LoadRules();
     }
@@ -506,6 +755,10 @@ namespace ModMenu {
         WriteProfileSettings(npc, alloc, Settings::NPCCombo);
         doc.AddMember("npc", npc, alloc);
 
+        rapidjson::Value playerUI(rapidjson::kObjectType);
+        WritePlayerUISettings(playerUI, alloc, Settings::PlayerUI);
+        doc.AddMember("playerUI", playerUI, alloc);
+
         rapidjson::StringBuffer buffer;
         rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
         doc.Accept(writer);
@@ -523,6 +776,13 @@ namespace ModMenu {
     void PlayerRender() {
         if (RenderProfileSettings("PlayerComboSettings", Settings::PlayerCombo)) {
             SaveSettings();
+        }
+    }
+
+    void UIRender() {
+        if (RenderPlayerUISettings()) {
+            SaveSettings();
+            Prisma::ApplyUISettings();
         }
     }
 
@@ -623,6 +883,7 @@ namespace ModMenu {
         LoadSettings();
         SKSEMenuFramework::SetSection("Combo Count");
         SKSEMenuFramework::AddSectionItem(GetLoc("menu.player_settings", "Player Settings"), PlayerRender);
+        SKSEMenuFramework::AddSectionItem(GetLoc("menu.ui_settings", "UI Settings"), UIRender);
         SKSEMenuFramework::AddSectionItem(GetLoc("menu.npc_settings", "NPC Settings"), NPCRender);
         SKSEMenuFramework::AddSectionItem(GetLoc("menu.rules_settings", "Rules Settings"), RulesRender);
     }
