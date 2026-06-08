@@ -3,13 +3,13 @@ import Konva from 'konva';
 
 type TierVisualConfig = {
     letterColor: [number, number, number, number];
-    strokeColor: [number, number, number, number];
-    strokeWidth: number;
-    strokeInside: boolean;
+    backgroundColor: [number, number, number, number];
     imagePath: string;
 };
 
 type UiConfig = {
+    enabled: boolean;
+    showFloatingMessages: boolean;
     editMode: boolean;
     useTierImages: boolean;
     useTextProgressFill: boolean;
@@ -43,9 +43,11 @@ const defaultTierColors: [number, number, number, number][] = [
     [1.0, 0.94, 0.3, 1],
     [1.0, 0.94, 0.42, 1],
 ];
-const defaultStrokeColor: [number, number, number, number] = [0.02, 0.02, 0.02, 1];
+const defaultBackgroundColor: [number, number, number, number] = [0.02, 0.02, 0.02, 0.55];
 
 const defaultConfig = (): UiConfig => ({
+    enabled: true,
+    showFloatingMessages: true,
     editMode: false,
     useTierImages: false,
     useTextProgressFill: false,
@@ -57,9 +59,7 @@ const defaultConfig = (): UiConfig => ({
     progressBarHeight: 13,
     tiers: defaultTierColors.map((letterColor) => ({
         letterColor,
-        strokeColor: defaultStrokeColor,
-        strokeWidth: 6,
-        strokeInside: false,
+        backgroundColor: defaultBackgroundColor,
         imagePath: '',
     })),
 });
@@ -138,8 +138,6 @@ function App() {
             width: 220,
             height: 13,
             fill: 'rgba(5,7,9,0.74)',
-            stroke: 'rgba(206,228,248,0.55)',
-            strokeWidth: 1,
             cornerRadius: 4,
             listening: false,
         });
@@ -159,9 +157,6 @@ function App() {
             text: '',
             fill: '#dfe9f4',
             baseFill: 'rgba(245,248,252,0.18)',
-            stroke: '#020304',
-            strokeWidth: 6,
-            strokeInside: false,
             progress: 0,
             useTextProgress: false,
         };
@@ -183,24 +178,15 @@ function App() {
                 nativeContext.save();
                 nativeContext.font = `bold ${fontSize}px Futura, Arial, sans-serif`;
                 nativeContext.textBaseline = 'top';
-                nativeContext.lineJoin = 'round';
-                nativeContext.miterLimit = 2;
 
                 const metrics = nativeContext.measureText(text);
                 const x = Math.max(0, (boxWidth - metrics.width) * 0.5);
 
-                const stroke = () => {
-                    if (rankShapeState.strokeWidth <= 0) return;
-                    nativeContext.strokeStyle = rankShapeState.stroke;
-                    nativeContext.lineWidth = rankShapeState.strokeWidth;
-                    nativeContext.strokeText(text, x, textTop);
-                };
                 const fill = (style: string) => {
                     nativeContext.fillStyle = style;
                     nativeContext.fillText(text, x, textTop);
                 };
 
-                if (!rankShapeState.strokeInside) stroke();
                 fill(rankShapeState.useTextProgress ? rankShapeState.baseFill : rankShapeState.fill);
 
                 if (rankShapeState.useTextProgress) {
@@ -213,7 +199,6 @@ function App() {
                     nativeContext.restore();
                 }
 
-                if (rankShapeState.strokeInside) stroke();
                 nativeContext.restore();
             },
         });
@@ -238,8 +223,6 @@ function App() {
             fontFamily: 'Futura, Arial, sans-serif',
             fontStyle: 'bold italic',
             fill: '#dfe9f4',
-            stroke: '#080808',
-            strokeWidth: 4,
             listening: false,
         });
         const hitLabel = new Konva.Text({
@@ -287,8 +270,6 @@ function App() {
                 fontFamily: 'Futura, Arial, sans-serif',
                 fontStyle: 'bold italic',
                 fill: '#eaf6ff',
-                stroke: '#080808',
-                strokeWidth: 2,
                 align: 'center',
                 listening: false,
             });
@@ -310,7 +291,6 @@ function App() {
         let renderedTier = 0;
         let targetBarWidth = 0;
         let targetTextFillProgress = 0;
-        let pulseUntil = 0;
 
         const getTierConfig = (tier: number) => config.tiers[clamp(tier, 0, ranks.length - 1)] ?? defaultConfig().tiers[0];
         const usesTextProgress = () => config.useTextProgressFill && !config.useTierImages;
@@ -396,17 +376,14 @@ function App() {
             const tier = clamp(renderedTier, 0, ranks.length - 1);
             const tierConfig = getTierConfig(tier);
             const color = colorToCss(tierConfig.letterColor);
-            const strokeColor = colorToCss(tierConfig.strokeColor);
-            const strokeWidth = clamp(tierConfig.strokeWidth, 0, 24);
+            const backgroundColor = colorToCss(tierConfig.backgroundColor);
             const imagePath = tierConfig.imagePath.trim();
             const image = config.useTierImages && imagePath ? loadImage(imagePath, tier) : null;
 
             rankVisualGroup.clearCache();
             rankShapeState.text = ranks[tier];
             rankShapeState.fill = color;
-            rankShapeState.stroke = strokeColor;
-            rankShapeState.strokeWidth = strokeWidth;
-            rankShapeState.strokeInside = Boolean(tierConfig.strokeInside);
+            rankShapeState.baseFill = backgroundColor;
             rankShapeState.useTextProgress = usesTextProgress();
             const hudWidth = Math.max(282, getBarWidth() + 36);
             const rankX = config.showTierName ? -18 : Math.max(0, (hudWidth - 170) * 0.5);
@@ -415,9 +392,9 @@ function App() {
             descText.text(rankNames[tier]);
             descText.visible(config.showTierName);
             descText.fill(color);
-            descText.stroke(strokeColor);
-            descText.strokeWidth(Math.max(1, Math.round(strokeWidth * 0.55)));
             hitLabel.fill(tier >= 6 ? '#ffe986' : '#d2e8ff');
+            barTrack.fill(backgroundColor);
+            barInset.fill(backgroundColor);
             barFill.fill(color);
 
             if (image) {
@@ -446,10 +423,8 @@ function App() {
             renderedTier = 0;
             targetBarWidth = 0;
             targetTextFillProgress = 0;
-            pulseUntil = 0;
             setHudVisible(false);
             rankVisualGroup.clearCache();
-            dynamicGroup.scale({ x: dynamicGroup.scaleX(), y: dynamicGroup.scaleY() });
             rankShapeState.text = '';
             rankShapeState.progress = 0;
             rankImage.visible(false);
@@ -473,7 +448,6 @@ function App() {
             setHudVisible(true);
             hitLabel.text(`${hitValue} HITS`);
             applyTierStyle();
-            pulseUntil = performance.now() + 120;
             staticLayer.batchDraw();
             requestFrame();
         };
@@ -511,23 +485,12 @@ function App() {
                     needsFrame = true;
                 }
 
-                if (pulseUntil > now) {
-                    const remaining = (pulseUntil - now) / 120;
-                    const scale = 1 + (0.08 * Math.max(0, remaining));
-                    rankVisualGroup.scale({ x: scale, y: scale });
-                    needsFrame = true;
-                } else if (rankVisualGroup.scaleX() !== 1) {
-                    rankVisualGroup.scale({ x: 1, y: 1 });
-                    needsFrame = true;
-                }
-
                 for (const message of messagePool) {
                     if (!message.active) continue;
                     const progress = Math.min(1, (now - message.start) / message.duration);
                     const lift = 54 * progress;
                     message.group.position({ x: message.startX, y: message.startY - lift });
                     message.group.opacity(1 - progress);
-                    message.group.scale({ x: 1 + (0.08 * progress), y: 1 + (0.08 * progress) });
                     if (progress >= 1) {
                         message.active = false;
                         message.group.visible(false);
@@ -559,7 +522,6 @@ function App() {
             slot.text.fill(delta > 0 ? '#f7ec8a' : '#ff9f9f');
             slot.group.position({ x: slot.startX, y: slot.startY });
             slot.group.opacity(1);
-            slot.group.scale({ x: 1, y: 1 });
             slot.group.visible(true);
             requestFrame();
         };
@@ -567,6 +529,8 @@ function App() {
         const parseConfig = (payload: string) => {
             const parsed = JSON.parse(payload) as Partial<UiConfig>;
             const next = defaultConfig();
+            next.enabled = parsed.enabled !== false;
+            next.showFloatingMessages = parsed.showFloatingMessages !== false;
             next.editMode = Boolean(parsed.editMode);
             next.useTierImages = Boolean(parsed.useTierImages);
             next.useTextProgressFill = Boolean(parsed.useTextProgressFill);
@@ -588,19 +552,13 @@ function App() {
                             clamp(Number(tier.letterColor[3] ?? 1), 0, 1),
                         ];
                     }
-                    if (Array.isArray(tier.strokeColor) && tier.strokeColor.length >= 3) {
-                        next.tiers[i].strokeColor = [
-                            clamp(Number(tier.strokeColor[0]), 0, 1),
-                            clamp(Number(tier.strokeColor[1]), 0, 1),
-                            clamp(Number(tier.strokeColor[2]), 0, 1),
-                            clamp(Number(tier.strokeColor[3] ?? 1), 0, 1),
+                    if (Array.isArray(tier.backgroundColor) && tier.backgroundColor.length >= 3) {
+                        next.tiers[i].backgroundColor = [
+                            clamp(Number(tier.backgroundColor[0]), 0, 1),
+                            clamp(Number(tier.backgroundColor[1]), 0, 1),
+                            clamp(Number(tier.backgroundColor[2]), 0, 1),
+                            clamp(Number(tier.backgroundColor[3] ?? 1), 0, 1),
                         ];
-                    }
-                    if (typeof tier.strokeWidth === 'number') {
-                        next.tiers[i].strokeWidth = clamp(tier.strokeWidth, 0, 24);
-                    }
-                    if (typeof tier.strokeInside === 'boolean') {
-                        next.tiers[i].strokeInside = tier.strokeInside;
                     }
                     if (typeof tier.imagePath === 'string') {
                         next.tiers[i].imagePath = tier.imagePath;
@@ -616,6 +574,10 @@ function App() {
 
                 const parts = payload.split('|');
                 if (parts.length < 2) return;
+                if (!config.enabled) {
+                    clearCombo();
+                    return;
+                }
 
                 actualHitValue = parseInt(parts[0], 10) || 0;
                 actualTier = clamp(parseInt(parts[1], 10) || 0, 0, ranks.length - 1);
@@ -634,6 +596,7 @@ function App() {
                 renderCombo(actualHitValue, actualTier, actualPoints, actualPointsRequired);
             },
             showComboMessage: (payload: string) => {
+                if (!config.enabled || !config.showFloatingMessages) return;
                 if (!payload) return;
                 const separator = payload.lastIndexOf('|');
                 if (separator <= 0) return;
@@ -651,7 +614,9 @@ function App() {
                 try {
                     config = parseConfig(payload);
                     positionHud();
-                    if (config.editMode || actualHitValue > 0) {
+                    if (!config.enabled) {
+                        clearCombo();
+                    } else if (config.editMode || actualHitValue > 0) {
                         renderEditPreview();
                     } else {
                         clearCombo();

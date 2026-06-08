@@ -14,6 +14,10 @@ namespace {
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 
         writer.StartObject();
+        writer.Key("enabled");
+        writer.Bool(Settings::PlayerUI.enabled);
+        writer.Key("showFloatingMessages");
+        writer.Bool(Settings::PlayerUI.showFloatingMessages);
         writer.Key("editMode");
         writer.Bool(Settings::PlayerUI.editMode);
         writer.Key("useTierImages");
@@ -43,17 +47,13 @@ namespace {
             writer.Double(Settings::PlayerUI.tiers[i].letterColor[2]);
             writer.Double(Settings::PlayerUI.tiers[i].letterColor[3]);
             writer.EndArray();
-            writer.Key("strokeColor");
+            writer.Key("backgroundColor");
             writer.StartArray();
-            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[0]);
-            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[1]);
-            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[2]);
-            writer.Double(Settings::PlayerUI.tiers[i].strokeColor[3]);
+            writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[0]);
+            writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[1]);
+            writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[2]);
+            writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[3]);
             writer.EndArray();
-            writer.Key("strokeWidth");
-            writer.Int(Settings::PlayerUI.tiers[i].strokeWidth);
-            writer.Key("strokeInside");
-            writer.Bool(Settings::PlayerUI.tiers[i].strokeInside);
             writer.Key("imagePath");
             writer.String(Settings::PlayerUI.tiers[i].imagePath.c_str());
             writer.EndObject();
@@ -146,6 +146,12 @@ bool Prisma::IsHidden() { return !PrismaUI || !view || PrismaUI->IsHidden(view);
 
 void Prisma::UpdateCombo(int hitValue, int comboValue, int comboPoints, int pointsPerTier) {
     if (!PrismaUI || !view) return;
+    if (!Settings::PlayerUI.enabled) {
+        if (!PrismaUI->IsHidden(view)) {
+            PrismaUI->Hide(view);
+        }
+        return;
+    }
 
     if (hitValue > 0 && PrismaUI->IsHidden(view)) {
         PrismaUI->Show(view);
@@ -169,6 +175,8 @@ void Prisma::UpdateCombo(int hitValue, int comboValue, int comboPoints, int poin
 
 void Prisma::ShowComboMessage(const std::string& label, int pointsDelta) {
     if (!PrismaUI || !view || pointsDelta == 0) return;
+    if (!Settings::PlayerUI.enabled) return;
+    if (!Settings::PlayerUI.showFloatingMessages) return;
 
     if (PrismaUI->IsHidden(view)) {
         PrismaUI->Show(view);
@@ -181,6 +189,13 @@ void Prisma::ShowComboMessage(const std::string& label, int pointsDelta) {
 
 void Prisma::ApplyUISettings() {
     if (!PrismaUI) {
+        return;
+    }
+
+    if (!Settings::PlayerUI.enabled) {
+        if (view && !PrismaUI->IsHidden(view)) {
+            PrismaUI->Hide(view);
+        }
         return;
     }
 

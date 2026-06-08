@@ -250,10 +250,9 @@ namespace ModMenu {
             for (auto& component : tier.letterColor) {
                 component = std::clamp(component, 0.0f, 1.0f);
             }
-            for (auto& component : tier.strokeColor) {
+            for (auto& component : tier.backgroundColor) {
                 component = std::clamp(component, 0.0f, 1.0f);
             }
-            tier.strokeWidth = std::clamp(tier.strokeWidth, 0, 24);
         }
     }
 
@@ -264,6 +263,9 @@ namespace ModMenu {
 
         if (parent.HasMember("showFloatingMessages") && parent["showFloatingMessages"].IsBool()) {
             settings.showFloatingMessages = parent["showFloatingMessages"].GetBool();
+        }
+        if (parent.HasMember("enabled") && parent["enabled"].IsBool()) {
+            settings.enabled = parent["enabled"].GetBool();
         }
         if (parent.HasMember("editMode") && parent["editMode"].IsBool()) {
             settings.editMode = parent["editMode"].GetBool();
@@ -312,23 +314,17 @@ namespace ModMenu {
                             colorIndex++;
                         }
                     }
-                    if (tierValue.HasMember("strokeColor") && tierValue["strokeColor"].IsArray()) {
+                    if (tierValue.HasMember("backgroundColor") && tierValue["backgroundColor"].IsArray()) {
                         int colorIndex = 0;
-                        for (const auto& component : tierValue["strokeColor"].GetArray()) {
+                        for (const auto& component : tierValue["backgroundColor"].GetArray()) {
                             if (colorIndex >= 4) {
                                 break;
                             }
                             if (component.IsNumber()) {
-                                settings.tiers[idx].strokeColor[colorIndex] = component.GetFloat();
+                                settings.tiers[idx].backgroundColor[colorIndex] = component.GetFloat();
                             }
                             colorIndex++;
                         }
-                    }
-                    if (tierValue.HasMember("strokeWidth") && tierValue["strokeWidth"].IsInt()) {
-                        settings.tiers[idx].strokeWidth = tierValue["strokeWidth"].GetInt();
-                    }
-                    if (tierValue.HasMember("strokeInside") && tierValue["strokeInside"].IsBool()) {
-                        settings.tiers[idx].strokeInside = tierValue["strokeInside"].GetBool();
                     }
                     if (tierValue.HasMember("imagePath") && tierValue["imagePath"].IsString()) {
                         settings.tiers[idx].imagePath = tierValue["imagePath"].GetString();
@@ -346,6 +342,7 @@ namespace ModMenu {
         rapidjson::Document::AllocatorType& alloc,
         const Settings::PlayerUISettings& settings) {
         parent.SetObject();
+        parent.AddMember("enabled", settings.enabled, alloc);
         parent.AddMember("showFloatingMessages", settings.showFloatingMessages, alloc);
         parent.AddMember("editMode", settings.editMode, alloc);
         parent.AddMember("useTierImages", settings.useTierImages, alloc);
@@ -368,13 +365,11 @@ namespace ModMenu {
             }
             tierObj.AddMember("letterColor", color, alloc);
 
-            rapidjson::Value strokeColor(rapidjson::kArrayType);
-            for (float component : settings.tiers[i].strokeColor) {
-                strokeColor.PushBack(component, alloc);
+            rapidjson::Value backgroundColor(rapidjson::kArrayType);
+            for (float component : settings.tiers[i].backgroundColor) {
+                backgroundColor.PushBack(component, alloc);
             }
-            tierObj.AddMember("strokeColor", strokeColor, alloc);
-            tierObj.AddMember("strokeWidth", settings.tiers[i].strokeWidth, alloc);
-            tierObj.AddMember("strokeInside", settings.tiers[i].strokeInside, alloc);
+            tierObj.AddMember("backgroundColor", backgroundColor, alloc);
             tierObj.AddMember("imagePath", rapidjson::Value(settings.tiers[i].imagePath.c_str(), alloc).Move(), alloc);
 
             tiers.PushBack(tierObj, alloc);
@@ -542,6 +537,15 @@ namespace ModMenu {
         bool changed = false;
         auto& ui = Settings::PlayerUI;
 
+        if (ImGui::Checkbox(GetLoc("menu.ui_enabled", "Enable combo UI"), &ui.enabled)) {
+            changed = true;
+        }
+        if (!ui.enabled) {
+            ImGui::Text("%s", GetLoc("menu.ui_disabled_hint", "Combo UI is disabled."));
+            ClampPlayerUISettings(ui);
+            return changed;
+        }
+
         if (ImGui::Checkbox(GetLoc("menu.show_floating_messages", "Show floating combo messages"), &ui.showFloatingMessages)) {
             changed = true;
         }
@@ -593,13 +597,7 @@ namespace ModMenu {
                 if (ImGui::ColorEdit4(GetLoc("menu.tier_letter_color", "Tier letter color"), ui.tiers[i].letterColor.data())) {
                     changed = true;
                 }
-                if (ImGui::ColorEdit4(GetLoc("menu.tier_stroke_color", "Tier stroke color"), ui.tiers[i].strokeColor.data())) {
-                    changed = true;
-                }
-                if (RenderIntSliderWithInput(GetLoc("menu.tier_stroke_width", "Tier stroke width"), &ui.tiers[i].strokeWidth, 0, 24)) {
-                    changed = true;
-                }
-                if (ImGui::Checkbox(GetLoc("menu.tier_stroke_inside", "Draw stroke inside fill"), &ui.tiers[i].strokeInside)) {
+                if (ImGui::ColorEdit4(GetLoc("menu.tier_background_color", "Tier background color"), ui.tiers[i].backgroundColor.data())) {
                     changed = true;
                 }
 
