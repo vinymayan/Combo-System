@@ -1,8 +1,103 @@
-﻿#include "Events.h"
+#include "Events.h"
+#include "Configuration.h"
 #include "DelayedDispatcher.h"
 #include "Prisma.h"
+#include <algorithm>
+#include <vector>
 
 namespace Sink {
+    namespace {
+        constexpr int kMaxComboTier = 9;
+
+        const Settings::ComboProfileSettings& GetProfileForActor(RE::FormID actorFormID) {
+            if (actorFormID == 0x14) {
+                return Settings::PlayerCombo;
+            }
+
+            auto actor = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
+            if (actor) {
+                for (const auto& rule : Settings::ComboRules) {
+                    auto perk = RE::TESForm::LookupByID<RE::BGSPerk>(rule.perkID);
+                    if (perk && actor->HasPerk(perk)) {
+                        return rule.profile;
+                    }
+                }
+            }
+
+            return Settings::NPCCombo;
+        }
+
+        bool IsComboEnabledForActor(RE::FormID actorFormID) {
+            return GetProfileForActor(actorFormID).enabled;
+        }
+
+        const Settings::TierSettings& GetTierSettings(const Settings::ComboProfileSettings& profile, int tier) {
+            const int clampedTier = std::clamp(tier, 0, Settings::kComboTierCount - 1);
+            return profile.tiers[clampedTier];
+        }
+
+        bool CanAdvanceTier(const ActorComboData& data, const Settings::TierSettings& settings) {
+            return !settings.requireMinHitsForTier || data.hitValue >= settings.minHitsForTier;
+        }
+
+        void ApplyTierProgression(ActorComboData& data, const Settings::ComboProfileSettings& profile) {
+            while (data.comboValue < kMaxComboTier) {
+                const auto& settings = GetTierSettings(profile, data.comboValue);
+                const int pointsPerTier = std::max(1, settings.pointsPerTier);
+                if (!CanAdvanceTier(data, settings)) {
+                    data.comboPoints = std::min(data.comboPoints, pointsPerTier - 1);
+                    return;
+                }
+                if (data.comboPoints < pointsPerTier) {
+                    break;
+                }
+                data.comboPoints -= pointsPerTier;
+                data.comboValue += 1;
+            }
+
+            if (data.comboValue >= kMaxComboTier) {
+                const auto& settings = GetTierSettings(profile, data.comboValue);
+                data.comboValue = kMaxComboTier;
+                data.comboPoints = std::min(data.comboPoints, std::max(1, settings.pointsPerTier));
+            }
+        }
+
+        int GetSourceType(RE::FormID sourceFormID) {
+            auto sourceForm = RE::TESForm::LookupByID(sourceFormID);
+            if (!sourceForm) {
+                return 0;
+            }
+
+            if (auto weapon = sourceForm->As<RE::TESObjectWEAP>()) {
+                return static_cast<int>(weapon->GetWeaponType()) + 1;
+            }
+            if (sourceForm->Is(RE::FormType::Spell)) {
+                return 100;
+            }
+            if (sourceForm->Is(RE::FormType::Scroll)) {
+                return 101;
+            }
+            return 200;
+        }
+
+        int GetAnimationEventDelta(std::string_view eventName, const Settings::TierSettings& settings) {
+            if (eventName == "DodgedCMF") return settings.dodgePoints;
+            if (eventName == "PerfDodgedCMF") return settings.perfectDodgePoints;
+            if (eventName == "GotDodgedCMF") return settings.gotDodgedPoints;
+            if (eventName == "GotPerfDodgeCMF") return settings.gotPerfectDodgedPoints;
+            if (eventName == "ParriedCMF") return settings.parryPoints;
+            if (eventName == "PerfParriedCMF") return settings.perfectParryPoints;
+            if (eventName == "GotParriedCMF") return settings.gotParriedPoints;
+            if (eventName == "GotPerfParriedCMF") return settings.gotPerfectParriedPoints;
+            if (eventName == "UndodgeableHitCMF") return settings.undodgeableHitPoints;
+            if (eventName == "HitByUndodgeableAtk") return settings.hitByUndodgeablePoints;
+            if (eventName == "UnblockableHitCMF") return settings.unblockableHitPoints;
+            if (eventName == "HitByUnblockAtk") return settings.hitByUnblockablePoints;
+            if (eventName == "SBF_StaggerStart") return settings.staggerStartPoints;
+            return 0;
+        }
+    }
+
     HitType ComboManager::DetermineHitType(const RE::TESHitEvent* a_event) {
         if (!a_event) return HitType::None;
 
@@ -22,71 +117,89 @@ namespace Sink {
         return HitType::NormalAttack;
     }
 
-    void ComboManager::RegisterHit(RE::FormID attackerFormID, HitType currentHitType) {
+    void ComboManager::RegisterHit(RE::FormID attackerFormID, HitType currentHitType, RE::FormID sourceFormID) {
         if (!attackerFormID) return;
+        if (!IsComboEnabledForActor(attackerFormID)) return;
 
-        int pointsGained = 10;
+        int pointsGained = 0;
         ActorComboData dataCopy;
-
         auto nowTime = std::chrono::steady_clock::now();
+        const auto& profile = GetProfileForActor(attackerFormID);
+        const int sourceType = GetSourceType(sourceFormID);
+        int expireSeconds = profile.expireComboSeconds;
 
         {
             std::unique_lock lock(_mutex);
             auto& data = _registry[attackerFormID];
+            const auto& tierSettings = GetTierSettings(profile, data.comboValue);
             data.hitValue += 1;
 
             if (data.lastHitType == currentHitType) {
-                pointsGained = 2;
-            }
-            else if (data.lastHitType != HitType::None) {
-                pointsGained = 20;
+                pointsGained = tierSettings.repeatHitPoints;
+            } else if (data.lastHitType != HitType::None) {
+                pointsGained = tierSettings.variedHitPoints;
+            } else {
+                pointsGained = tierSettings.baseHitPoints;
             }
 
-            data.comboValue += pointsGained;
+            if (data.lastSourceFormID != 0 && sourceFormID != 0 && data.lastSourceFormID != sourceFormID) {
+                pointsGained += tierSettings.sourceChangeBonus;
+            }
+            if (data.lastSourceType != 0 && sourceType != 0 && data.lastSourceType != sourceType) {
+                pointsGained += tierSettings.sourceTypeChangeBonus;
+            }
+
+            data.comboPoints += pointsGained;
+            data.lastSourceFormID = sourceFormID;
+            data.lastSourceType = sourceType;
             data.lastHitType = currentHitType;
             data.lastHitTime = nowTime;
+            data.decayAccumulator = 0.0f;
 
+            ApplyTierProgression(data, profile);
             dataCopy = data;
         }
 
         UpdateGraphVariables(attackerFormID, dataCopy);
 
-        Utils::DelayedDispatcher::Get().PostDelayed(std::chrono::seconds(20), [this, attackerFormID, nowTime]() {
-            // Executa a verificação e limpeza síncrona diretamente na Thread Principal do Skyrim
-            SKSE::GetTaskInterface()->AddTask([this, attackerFormID, nowTime]() {
-                auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(attackerFormID);
-                if (!actorPtr || actorPtr->IsDead() || !actorPtr->Is3DLoaded()) {
-                    if (attackerFormID == 0x14) {
-                        Prisma::UpdateCombo(0, 0);
+        if (expireSeconds > 0) {
+            Utils::DelayedDispatcher::Get().PostDelayed(std::chrono::seconds(expireSeconds), [this, attackerFormID, nowTime]() {
+                SKSE::GetTaskInterface()->AddTask([this, attackerFormID, nowTime]() {
+                    auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(attackerFormID);
+                    if (!actorPtr || actorPtr->IsDead() || !actorPtr->Is3DLoaded()) {
+                        if (attackerFormID == 0x14) {
+                            Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                bool shouldReset = false;
-
-                {
-                    std::unique_lock lock(_mutex);
-                    auto it = _registry.find(attackerFormID);
-                    if (it != _registry.end() && it->second.lastHitTime == nowTime) {
-                        _registry.erase(it);
-                        shouldReset = true;
+                    bool shouldReset = false;
+                    {
+                        std::unique_lock lock(_mutex);
+                        auto it = _registry.find(attackerFormID);
+                        if (it != _registry.end() && it->second.lastHitTime == nowTime) {
+                            _registry.erase(it);
+                            shouldReset = true;
+                        }
                     }
-                }
 
-                if (shouldReset) {
-                    actorPtr->SetGraphVariableInt("HitValueCMF", 0);
-                    actorPtr->SetGraphVariableInt("ComboValueCMF", 0);
+                    if (shouldReset) {
+                        actorPtr->SetGraphVariableInt("HitValueCMF", 0);
+                        actorPtr->SetGraphVariableInt("ComboValueCMF", 0);
+                        actorPtr->SetGraphVariableInt("ComboPointsCMF", 0);
 
-                    if (actorPtr->IsPlayerRef() || attackerFormID == 0x14) {
-                        Prisma::UpdateCombo(0, 0);
+                        if (actorPtr->IsPlayerRef() || attackerFormID == 0x14) {
+                            Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
+                        }
                     }
-                }
                 });
             });
+        }
     }
 
     void ComboManager::RegisterGetHit(RE::FormID targetFormID) {
         if (!targetFormID) return;
+        if (!IsComboEnabledForActor(targetFormID)) return;
 
         bool found = false;
         ActorComboData dataCopy;
@@ -96,8 +209,9 @@ namespace Sink {
             auto it = _registry.find(targetFormID);
             if (it != _registry.end()) {
                 auto& data = it->second;
-                data.comboValue -= 15;
-                if (data.comboValue < 0) data.comboValue = 0;
+                const auto& profile = GetProfileForActor(targetFormID);
+                const auto& tierSettings = GetTierSettings(profile, data.comboValue);
+                data.comboPoints = std::max(0, data.comboPoints - tierSettings.getHitPenalty);
 
                 dataCopy = data;
                 found = true;
@@ -106,6 +220,64 @@ namespace Sink {
 
         if (found) {
             UpdateGraphVariables(targetFormID, dataCopy);
+        }
+    }
+
+    void ComboManager::AdjustCombo(RE::FormID actorFormID, int pointsDelta) {
+        if (!actorFormID || pointsDelta == 0) return;
+        if (!IsComboEnabledForActor(actorFormID)) return;
+
+        ActorComboData dataCopy;
+        bool changed = false;
+        auto nowTime = std::chrono::steady_clock::now();
+        const auto& profile = GetProfileForActor(actorFormID);
+        const int expireSeconds = profile.expireComboSeconds;
+
+        {
+            std::unique_lock lock(_mutex);
+            auto& data = _registry[actorFormID];
+            data.comboPoints = std::max(0, data.comboPoints + pointsDelta);
+            data.lastHitTime = nowTime;
+            data.decayAccumulator = 0.0f;
+            ApplyTierProgression(data, profile);
+            dataCopy = data;
+            changed = true;
+        }
+
+        if (changed) {
+            UpdateGraphVariables(actorFormID, dataCopy);
+        }
+
+        if (expireSeconds > 0) {
+            Utils::DelayedDispatcher::Get().PostDelayed(std::chrono::seconds(expireSeconds), [this, actorFormID, nowTime]() {
+                SKSE::GetTaskInterface()->AddTask([this, actorFormID, nowTime]() {
+                    std::unique_lock lock(_mutex);
+                    auto it = _registry.find(actorFormID);
+                    if (it != _registry.end() && it->second.lastHitTime == nowTime) {
+                        lock.unlock();
+                        RemoveActor(actorFormID);
+                    }
+                });
+            });
+        }
+    }
+
+    void ComboManager::ProcessAnimationEvent(RE::FormID actorFormID, std::string_view eventName) {
+        if (!actorFormID || !IsComboEnabledForActor(actorFormID)) return;
+
+        int currentTier = 0;
+        {
+            std::shared_lock lock(_mutex);
+            auto it = _registry.find(actorFormID);
+            if (it != _registry.end()) {
+                currentTier = it->second.comboValue;
+            }
+        }
+
+        const auto& profile = GetProfileForActor(actorFormID);
+        const int pointsDelta = GetAnimationEventDelta(eventName, GetTierSettings(profile, currentTier));
+        if (pointsDelta != 0) {
+            AdjustCombo(actorFormID, pointsDelta);
         }
     }
 
@@ -126,47 +298,108 @@ namespace Sink {
             auto actor = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
             if (!actor || actor->IsDead() || !actor->Is3DLoaded()) {
                 if (actorFormID == 0x14) {
-                    Prisma::UpdateCombo(0, 0);
+                    Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
                 }
                 return;
             }
 
             actor->SetGraphVariableInt("HitValueCMF", 0);
             actor->SetGraphVariableInt("ComboValueCMF", 0);
+            actor->SetGraphVariableInt("ComboPointsCMF", 0);
 
             if (actor->IsPlayerRef() || actorFormID == 0x14) {
-                Prisma::UpdateCombo(0, 0);
+                Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
             }
+        }
+    }
+
+    void ComboManager::ResetAll() {
+        {
+            std::unique_lock lock(_mutex);
+            _registry.clear();
+        }
+
+        if (auto player = RE::PlayerCharacter::GetSingleton()) {
+            player->SetGraphVariableInt("HitValueCMF", 0);
+            player->SetGraphVariableInt("ComboValueCMF", 0);
+            player->SetGraphVariableInt("ComboPointsCMF", 0);
+        }
+
+        if (auto processLists = RE::ProcessLists::GetSingleton()) {
+            for (auto& actorHandle : processLists->highActorHandles) {
+                if (auto actor = actorHandle.get().get()) {
+                    actor->SetGraphVariableInt("HitValueCMF", 0);
+                    actor->SetGraphVariableInt("ComboValueCMF", 0);
+                    actor->SetGraphVariableInt("ComboPointsCMF", 0);
+                }
+            }
+        }
+
+        Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
+        Prisma::Hide();
+    }
+
+    void ComboManager::UpdateDecay(float deltaTime) {
+        if (deltaTime <= 0.0f) return;
+
+        std::vector<std::pair<RE::FormID, ActorComboData>> changedActors;
+
+        {
+            std::unique_lock lock(_mutex);
+            for (auto& [actorFormID, data] : _registry) {
+                const auto& profile = GetProfileForActor(actorFormID);
+                const auto& settings = GetTierSettings(profile, data.comboValue);
+                if (!settings.losePointsPerSecond || settings.pointsLostPerSecond <= 0 || data.comboPoints <= 0) {
+                    continue;
+                }
+
+                data.decayAccumulator += deltaTime * static_cast<float>(settings.pointsLostPerSecond);
+                const int pointsToLose = static_cast<int>(data.decayAccumulator);
+                if (pointsToLose <= 0) {
+                    continue;
+                }
+
+                data.decayAccumulator -= static_cast<float>(pointsToLose);
+                data.comboPoints = std::max(0, data.comboPoints - pointsToLose);
+                changedActors.emplace_back(actorFormID, data);
+            }
+        }
+
+        for (const auto& [actorFormID, data] : changedActors) {
+            UpdateGraphVariables(actorFormID, data);
         }
     }
 
     void ComboManager::UpdateGraphVariables(RE::FormID actorFormID, const ActorComboData& data) {
         if (!actorFormID) return;
 
-        int hitVal = data.hitValue;
-        int comboVal = data.comboValue;
+        const int hitVal = data.hitValue;
+        const int comboVal = data.comboValue;
+        const int comboPoints = data.comboPoints;
+        const auto& profile = GetProfileForActor(actorFormID);
+        const int pointsPerTier = std::max(1, GetTierSettings(profile, comboVal).pointsPerTier);
 
-        // Passa apenas o FormID e as propriedades numéricas para a task
-        SKSE::GetTaskInterface()->AddTask([actorFormID, hitVal, comboVal]() {
-            // Realiza o Lookup de forma síncrona e isolada na Thread Principal
+        SKSE::GetTaskInterface()->AddTask([actorFormID, hitVal, comboVal, comboPoints, pointsPerTier]() {
             auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
             if (!actorPtr || actorPtr->IsDead() || !actorPtr->Is3DLoaded()) return;
 
             actorPtr->SetGraphVariableInt("HitValueCMF", hitVal);
             actorPtr->SetGraphVariableInt("ComboValueCMF", comboVal);
+            actorPtr->SetGraphVariableInt("ComboPointsCMF", comboPoints);
 
             if (actorPtr->IsPlayerRef() || actorFormID == 0x14) {
-                Prisma::UpdateCombo(hitVal, comboVal);
+                Prisma::UpdateCombo(hitVal, comboVal, comboPoints, pointsPerTier);
             }
-            });
+        });
     }
 
-    RE::BSEventNotifyControl HitEventHandler::ProcessEvent(const RE::TESHitEvent* a_event,
+    RE::BSEventNotifyControl HitEventHandler::ProcessEvent(
+        const RE::TESHitEvent* a_event,
         RE::BSTEventSource<RE::TESHitEvent>* a_source) {
         if (!a_event || !a_event->cause || !a_event->target) {
             return RE::BSEventNotifyControl::kContinue;
         }
-        
+
         auto targetRef = a_event->target.get();
         if (!targetRef) {
             return RE::BSEventNotifyControl::kContinue;
@@ -177,19 +410,19 @@ namespace Sink {
             return RE::BSEventNotifyControl::kContinue;
         }
 
-
         const auto targetFormID = target->GetFormID();
         RE::FormID attackerFormID = 0;
         if (auto causeRef = a_event->cause.get()) {
             if (auto* attacker = causeRef->As<RE::Actor>()) {
                 attackerFormID = attacker->GetFormID();
-                SKSE::log::debug("Hit disparado por actor: FormID [0x{:08X}], Nome: '{}'", attackerFormID, attacker->GetName());
+                SKSE::log::debug("Hit fired by actor: FormID [0x{:08X}], Name: '{}'", attackerFormID, attacker->GetName());
             }
         }
+
         const auto hitType = ComboManager::GetSingleton()->DetermineHitType(a_event);
 
         if (attackerFormID) {
-            ComboManager::GetSingleton()->RegisterHit(attackerFormID, hitType);
+            ComboManager::GetSingleton()->RegisterHit(attackerFormID, hitType, a_event->source);
         }
 
         ComboManager::GetSingleton()->RegisterGetHit(targetFormID);
@@ -197,23 +430,125 @@ namespace Sink {
         return RE::BSEventNotifyControl::kContinue;
     }
 
-    RE::BSEventNotifyControl MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event,
+    RE::BSEventNotifyControl MenuOpenCloseEventHandler::ProcessEvent(
+        const RE::MenuOpenCloseEvent* a_event,
         RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_source) {
         if (a_event) {
             auto ui = RE::UI::GetSingleton();
             if (ui) {
-                bool isGamePaused = ui->GameIsPaused();
+                const bool isGamePaused = ui->GameIsPaused();
 
                 Prisma::SetTimerPaused(isGamePaused);
 
                 if (isGamePaused) {
                     Utils::DelayedDispatcher::Get().Pause();
-                }
-                else {
+                } else {
                     Utils::DelayedDispatcher::Get().Resume();
                 }
             }
         }
+        return RE::BSEventNotifyControl::kContinue;
+    }
+
+    RE::BSEventNotifyControl AnimationEventHandler::ProcessEvent(
+        const RE::BSAnimationGraphEvent* a_event,
+        RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_source) {
+        if (!a_event || !a_event->holder) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        auto actor = a_event->holder->As<RE::Actor>();
+        if (!actor || actor->IsDead()) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        const auto actorFormID = actor->GetFormID();
+        if (!IsComboEnabledForActor(actorFormID)) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        ComboManager::GetSingleton()->ProcessAnimationEvent(actorFormID, a_event->tag);
+
+        return RE::BSEventNotifyControl::kContinue;
+    }
+
+    namespace AnimationSinks {
+        static std::shared_mutex g_sinkMutex;
+        static std::unordered_set<RE::FormID> g_registeredActors;
+
+        void RegisterActor(RE::Actor* actor) {
+            if (!actor || actor->IsDead()) return;
+
+            std::unique_lock lock(g_sinkMutex);
+            if (g_registeredActors.insert(actor->GetFormID()).second) {
+                actor->AddAnimationGraphEventSink(AnimationEventHandler::GetSingleton());
+            }
+        }
+
+        void UnregisterActor(RE::Actor* actor) {
+            if (!actor) return;
+
+            std::unique_lock lock(g_sinkMutex);
+            if (g_registeredActors.erase(actor->GetFormID()) > 0) {
+                actor->RemoveAnimationGraphEventSink(AnimationEventHandler::GetSingleton());
+            }
+        }
+
+        void RegisterExistingActors() {
+            if (auto player = RE::PlayerCharacter::GetSingleton()) {
+                RegisterActor(player);
+            }
+
+            if (auto processLists = RE::ProcessLists::GetSingleton()) {
+                for (auto& actorHandle : processLists->highActorHandles) {
+                    if (auto actor = actorHandle.get().get()) {
+                        RegisterActor(actor);
+                    }
+                }
+            }
+        }
+
+        void Reset() {
+            std::unique_lock lock(g_sinkMutex);
+            g_registeredActors.clear();
+        }
+    }
+
+    RE::BSEventNotifyControl CombatEventHandler::ProcessEvent(
+        const RE::TESCombatEvent* a_event,
+        RE::BSTEventSource<RE::TESCombatEvent>* a_source) {
+        if (!a_event || !a_event->actor) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        auto ref = a_event->actor.get();
+        auto actor = ref ? ref->As<RE::Actor>() : nullptr;
+        if (!actor) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        if (a_event->newState.get() == RE::ACTOR_COMBAT_STATE::kCombat) {
+            AnimationSinks::RegisterActor(actor);
+        } else if (a_event->newState.get() == RE::ACTOR_COMBAT_STATE::kNone && !actor->IsPlayerRef()) {
+            AnimationSinks::UnregisterActor(actor);
+        }
+
+        return RE::BSEventNotifyControl::kContinue;
+    }
+
+    RE::BSEventNotifyControl ObjectLoadedEventHandler::ProcessEvent(
+        const RE::TESObjectLoadedEvent* a_event,
+        RE::BSTEventSource<RE::TESObjectLoadedEvent>* a_source) {
+        if (!a_event || !a_event->loaded) {
+            return RE::BSEventNotifyControl::kContinue;
+        }
+
+        auto form = RE::TESForm::LookupByID(a_event->formID);
+        auto actor = form ? form->As<RE::Actor>() : nullptr;
+        if (actor) {
+            AnimationSinks::RegisterActor(actor);
+        }
+
         return RE::BSEventNotifyControl::kContinue;
     }
 }

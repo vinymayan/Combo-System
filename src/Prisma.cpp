@@ -16,7 +16,15 @@ void Prisma::Install() {
     }
 }
 
+void Prisma::Preload() {
+    Show();
+    ResetComboDisplay();
+    Hide();
+}
+
 void Prisma::Show() {
+    if (!PrismaUI) return;
+
     if (!createdView) {
         createdView = true;
 
@@ -63,14 +71,18 @@ void Prisma::Hide() {
     }
 }
 
-bool Prisma::IsHidden() { return PrismaUI->IsHidden(view); }
+bool Prisma::IsHidden() { return !PrismaUI || !view || PrismaUI->IsHidden(view); }
 
-void Prisma::UpdateCombo(int hitValue, int comboValue) {
+void Prisma::UpdateCombo(int hitValue, int comboValue, int comboPoints, int pointsPerTier) {
     if (!PrismaUI || !view) return;
 
+    if (hitValue > 0 && PrismaUI->IsHidden(view)) {
+        PrismaUI->Show(view);
+    }
+
     static std::string payload;
-    payload = std::to_string(hitValue) + "|" + std::to_string(comboValue);
-	logger::debug("Prisma::UpdateCombo - Enviando atualização para a UI -> Hit: {}, Combo: {}, Payload: {}", hitValue, comboValue, payload);
+    payload = std::to_string(hitValue) + "|" + std::to_string(comboValue) + "|" + std::to_string(comboPoints) + "|" + std::to_string(pointsPerTier);
+	logger::debug("Prisma::UpdateCombo - Enviando atualização para a UI -> Hit: {}, Tier: {}, Points: {}, Required: {}, Payload: {}", hitValue, comboValue, comboPoints, pointsPerTier, payload);
     try {
 		logger::debug("Prisma::UpdateCombo - Enviando atualização para a UI de forma segura...");
         // Envia o ponteiro persistente e seguro de forma assíncrona
@@ -82,6 +94,10 @@ void Prisma::UpdateCombo(int hitValue, int comboValue) {
     catch (...) {
         SKSE::log::error("Prisma::UpdateCombo - Erro desconhecido fatal interceptado durante o InteropCall!");
     }
+}
+
+void Prisma::ResetComboDisplay() {
+    UpdateCombo(0, 0, 0, 100);
 }
 
 void Prisma::SetTimerPaused(bool paused) {
