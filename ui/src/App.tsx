@@ -4,14 +4,13 @@ import Konva from 'konva';
 type TierVisualConfig = {
     letterColor: [number, number, number, number];
     backgroundColor: [number, number, number, number];
-    imagePath: string;
 };
 
 type UiConfig = {
     enabled: boolean;
     showFloatingMessages: boolean;
+    showComboHits: boolean;
     editMode: boolean;
-    useTierImages: boolean;
     useTextProgressFill: boolean;
     showTierName: boolean;
     positionXPercent: number;
@@ -48,8 +47,8 @@ const defaultBackgroundColor: [number, number, number, number] = [0.02, 0.02, 0.
 const defaultConfig = (): UiConfig => ({
     enabled: true,
     showFloatingMessages: true,
+    showComboHits: true,
     editMode: false,
-    useTierImages: false,
     useTextProgressFill: false,
     showTierName: true,
     positionXPercent: 83,
@@ -60,7 +59,6 @@ const defaultConfig = (): UiConfig => ({
     tiers: defaultTierColors.map((letterColor) => ({
         letterColor,
         backgroundColor: defaultBackgroundColor,
-        imagePath: '',
     })),
 });
 
@@ -122,6 +120,48 @@ function App() {
             height: window.innerHeight,
         });
 
+        const rankDom = document.createElement('div');
+        const rankDomBase = document.createElement('img');
+        const rankDomFillMask = document.createElement('div');
+        const rankDomFill = document.createElement('img');
+
+        rankDom.style.position = 'absolute';
+        rankDom.style.pointerEvents = 'none';
+        rankDom.style.overflow = 'hidden';
+        rankDom.style.display = 'none';
+        rankDom.style.left = '0px';
+        rankDom.style.top = '0px';
+
+        rankDomBase.style.position = 'absolute';
+        rankDomBase.style.inset = '0';
+        rankDomBase.style.width = '100%';
+        rankDomBase.style.height = '100%';
+        rankDomBase.style.objectFit = 'contain';
+        rankDomBase.style.opacity = '0.5';
+        rankDomBase.style.pointerEvents = 'none';
+
+        rankDomFillMask.style.position = 'absolute';
+        rankDomFillMask.style.left = '0';
+        rankDomFillMask.style.bottom = '0';
+        rankDomFillMask.style.width = '100%';
+        rankDomFillMask.style.height = '0%';
+        rankDomFillMask.style.overflow = 'hidden';
+        rankDomFillMask.style.pointerEvents = 'none';
+
+        rankDomFill.style.position = 'absolute';
+        rankDomFill.style.left = '0';
+        rankDomFill.style.bottom = '0';
+        rankDomFill.style.width = '100%';
+        rankDomFill.style.height = '100%';
+        rankDomFill.style.objectFit = 'contain';
+        rankDomFill.style.opacity = '1';
+        rankDomFill.style.pointerEvents = 'none';
+
+        rankDomFillMask.appendChild(rankDomFill);
+        rankDom.appendChild(rankDomBase);
+        rankDom.appendChild(rankDomFillMask);
+        containerRef.appendChild(rankDom);
+
         const staticLayer = new Konva.Layer({ listening: false });
         const dynamicLayer = new Konva.Layer({ listening: false });
         const staticGroup = new Konva.Group({ listening: false });
@@ -150,9 +190,37 @@ function App() {
             cornerRadius: 3,
             listening: false,
         });
-        staticGroup.add(barTrack, barInset);
+        const imagePlaceholder = document.createElement('img');
+        const barFill = new Konva.Rect({
+            x: 21,
+            y: 129,
+            width: 0,
+            height: 7,
+            fill: '#81a4c7',
+            cornerRadius: 3,
+            listening: false,
+        });
+        const barFrameImage = new Konva.Image({
+            x: 18,
+            y: 126,
+            width: 220,
+            height: 13,
+            image: imagePlaceholder,
+            visible: false,
+            listening: false,
+        });
+        staticGroup.add(barTrack, barInset, barFill, barFrameImage);
 
         const rankVisualGroup = new Konva.Group({ listening: false });
+        const tierBackgroundImage = new Konva.Image({
+            x: 0,
+            y: -34,
+            width: 282,
+            height: 168,
+            image: imagePlaceholder,
+            visible: false,
+            listening: false,
+        });
         const rankShapeState = {
             text: '',
             fill: '#dfe9f4',
@@ -202,53 +270,94 @@ function App() {
                 nativeContext.restore();
             },
         });
-        const imagePlaceholder = document.createElement('img');
         const rankImage = new Konva.Image({
-            x: 2,
-            y: -18,
-            width: 124,
-            height: 124,
+            x: 0,
+            y: -34,
+            width: 170,
+            height: 168,
             image: imagePlaceholder,
             visible: false,
             listening: false,
         });
-        rankVisualGroup.add(rankShape, rankImage);
+        const rankBaseImage = new Konva.Image({
+            x: 0,
+            y: -34,
+            width: 170,
+            height: 168,
+            image: imagePlaceholder,
+            opacity: 0.28,
+            visible: false,
+            listening: false,
+        });
+        const rankFillGroup = new Konva.Group({
+            listening: false,
+            visible: false,
+        });
+        const rankFillState: {
+            image: HTMLImageElement | null;
+            assetPath: string;
+            isVector: boolean;
+            naturalWidth: number;
+            naturalHeight: number;
+            width: number;
+            height: number;
+        } = {
+            image: null,
+            assetPath: '',
+            isVector: false,
+            naturalWidth: 1,
+            naturalHeight: 1,
+            width: 170,
+            height: 168,
+        };
+        const rankFillImage = new Konva.Image({
+            x: 0,
+            y: 0,
+            width: 170,
+            height: 168,
+            image: imagePlaceholder,
+            visible: false,
+            listening: false,
+        });
+        rankFillGroup.add(rankFillImage);
+        rankVisualGroup.add(rankShape, rankImage, rankBaseImage, rankFillGroup);
+
+        const descImage = new Konva.Image({
+            x: 0,
+            y: 30,
+            width: 282,
+            height: 64,
+            image: imagePlaceholder,
+            visible: false,
+            listening: false,
+        });
 
         const descText = new Konva.Text({
-            x: 112,
+            x: 0,
             y: 30,
-            width: 170,
+            width: 282,
             text: '',
             fontSize: 30,
             fontFamily: 'Futura, Arial, sans-serif',
             fontStyle: 'bold italic',
             fill: '#dfe9f4',
+            align: 'center',
             listening: false,
         });
         const hitLabel = new Konva.Text({
-            x: 128,
-            y: 78,
-            width: 116,
+            x: 18,
+            y: 144,
+            width: 220,
             text: '',
             fontSize: 15,
             fontFamily: 'Futura, Arial, sans-serif',
             fontStyle: 'bold',
             fill: '#d2e8ff',
-            align: 'right',
+            align: 'center',
             letterSpacing: 1,
             listening: false,
         });
-        const barFill = new Konva.Rect({
-            x: 21,
-            y: 129,
-            width: 0,
-            height: 7,
-            fill: '#81a4c7',
-            cornerRadius: 3,
-            listening: false,
-        });
-
-        dynamicGroup.add(rankVisualGroup, descText, hitLabel, barFill);
+        dynamicGroup.add(tierBackgroundImage, descText, descImage, rankVisualGroup, hitLabel);
 
         type FloatingMessage = {
             group: Konva.Group;
@@ -269,7 +378,7 @@ function App() {
                 fontSize: 17,
                 fontFamily: 'Futura, Arial, sans-serif',
                 fontStyle: 'bold italic',
-                fill: '#eaf6ff',
+                fill: '#eaf6fe',
                 align: 'center',
                 listening: false,
             });
@@ -278,7 +387,13 @@ function App() {
             messagePool.push({ group, text, active: false, start: 0, duration: 820, startX: 0, startY: 0 });
         }
 
-        const imageCache = new Map<string, HTMLImageElement | null>();
+        type TierImageCandidate = {
+            path: string;
+            image: HTMLImageElement | null;
+            failed: boolean;
+        };
+
+        const tierImageCache = new Map<string, TierImageCandidate>();
         let config = defaultConfig();
         let isTimerPaused = false;
         let animationFrameId = 0;
@@ -291,9 +406,13 @@ function App() {
         let renderedTier = 0;
         let targetBarWidth = 0;
         let targetTextFillProgress = 0;
+        let styledTier = -1;
+        let styleDirty = true;
+        let lastHudVisible: boolean | null = null;
+        let lastShowBar: boolean | null = null;
 
         const getTierConfig = (tier: number) => config.tiers[clamp(tier, 0, ranks.length - 1)] ?? defaultConfig().tiers[0];
-        const usesTextProgress = () => config.useTextProgressFill && !config.useTierImages;
+        const usesTextProgress = () => config.useTextProgressFill;
         const getUiScale = () => clamp(config.scalePercent, 40, 300) / 100;
         const getCachePixelRatio = () => clamp(getUiScale(), 1, 2.5);
         const getBarWidth = () => clamp(config.progressBarWidth, 60, 600);
@@ -306,12 +425,18 @@ function App() {
             barTrack.height(getBarHeight());
             barInset.width(getBarFillWidth());
             barInset.height(getBarFillHeight());
+            barFrameImage.width(getBarWidth());
+            barFrameImage.height(getBarHeight());
             barFill.height(getBarFillHeight());
-            hitLabel.x(18 + getBarWidth() - 116);
+            hitLabel.y(126 + getBarHeight() + 5);
+            hitLabel.width(getBarWidth());
         };
 
         const setHudVisible = (visible: boolean) => {
             const showBar = visible && !usesTextProgress();
+            if (visible === lastHudVisible && showBar === lastShowBar) return;
+            lastHudVisible = visible;
+            lastShowBar = showBar;
             staticGroup.visible(showBar);
             barFill.visible(showBar);
             dynamicGroup.visible(visible);
@@ -324,7 +449,7 @@ function App() {
         const positionHud = () => {
             const scale = getUiScale();
             const hudWidth = Math.max(282, getBarWidth() + 36) * scale;
-            const hudHeight = 170 * scale;
+            const hudHeight = Math.max(170, 126 + getBarHeight() + 28) * scale;
             const rawX = window.innerWidth * (clamp(config.positionXPercent, 0, 100) / 100);
             const rawY = window.innerHeight * (clamp(config.positionYPercent, 0, 100) / 100);
             const x = clamp(rawX, 0, Math.max(0, window.innerWidth - hudWidth));
@@ -351,34 +476,179 @@ function App() {
             }
         };
 
-        const loadImage = (path: string, tier: number) => {
-            const src = normalizeImageSrc(path);
-            if (!src) return null;
-            if (imageCache.has(src)) return imageCache.get(src) ?? null;
+        const setRankDomVisible = (visible: boolean) => {
+            rankDom.style.display = visible ? 'block' : 'none';
+        };
 
-            imageCache.set(src, null);
-            const image = new Image();
-            image.onload = () => {
-                imageCache.set(src, image);
-                if (renderedTier === tier) {
-                    applyTierStyle();
-                    dynamicLayer.batchDraw();
+        const updateRankDomProgress = () => {
+            const progress = clamp(rankShapeState.progress, 0, 1);
+            rankDomFillMask.style.height = `${progress * 100}%`;
+        };
+
+        const fitRankDomContain = (image: HTMLImageElement, boxX: number, boxY: number, boxWidth: number, boxHeight: number) => {
+            const naturalWidth = Math.max(1, image.naturalWidth || image.width || boxWidth);
+            const naturalHeight = Math.max(1, image.naturalHeight || image.height || boxHeight);
+            const imageScale = Math.min(boxWidth / naturalWidth, boxHeight / naturalHeight);
+            const width = naturalWidth * imageScale;
+            const height = naturalHeight * imageScale;
+            const groupScale = getUiScale();
+            const groupX = dynamicGroup.x();
+            const groupY = dynamicGroup.y();
+            rankDom.style.left = `${groupX + ((boxX + ((boxWidth - width) * 0.5)) * groupScale)}px`;
+            rankDom.style.top = `${groupY + ((boxY + ((boxHeight - height) * 0.5)) * groupScale)}px`;
+            rankDom.style.width = `${width * groupScale}px`;
+            rankDom.style.height = `${height * groupScale}px`;
+            rankDomFill.style.width = `${width * groupScale}px`;
+            rankDomFill.style.height = `${height * groupScale}px`;
+        };
+
+        const fitImageContain = (
+            node: Konva.Image,
+            image: HTMLImageElement,
+            boxX: number,
+            boxY: number,
+            boxWidth: number,
+            boxHeight: number
+        ) => {
+            const naturalWidth = Math.max(1, image.naturalWidth || image.width || boxWidth);
+            const naturalHeight = Math.max(1, image.naturalHeight || image.height || boxHeight);
+            const scale = Math.min(boxWidth / naturalWidth, boxHeight / naturalHeight);
+            const width = naturalWidth * scale;
+            const height = naturalHeight * scale;
+            node.x(boxX + ((boxWidth - width) * 0.5));
+            node.y(boxY + ((boxHeight - height) * 0.5));
+            node.width(width);
+            node.height(height);
+            return {
+                x: node.x(),
+                y: node.y(),
+                width,
+                height,
+            };
+        };
+
+        const applyRankFillClip = () => {
+            const progress = clamp(rankShapeState.progress, 0, 1);
+            const fillHeight = rankFillState.height * progress;
+            if (rankFillState.isVector) {
+                rankFillGroup.clip({
+                    x: 0,
+                    y: rankFillState.height - fillHeight,
+                    width: rankFillState.width,
+                    height: fillHeight,
+                });
+                rankFillImage.crop({
+                    x: 0,
+                    y: 0,
+                    width: rankFillState.naturalWidth,
+                    height: rankFillState.naturalHeight,
+                });
+                rankFillImage.y(0);
+                rankFillImage.width(rankFillState.width);
+                rankFillImage.height(rankFillState.height);
+            } else {
+                const sourceFillHeight = rankFillState.naturalHeight * progress;
+                rankFillGroup.clip({
+                    x: 0,
+                    y: 0,
+                    width: rankFillState.width,
+                    height: rankFillState.height,
+                });
+                rankFillImage.crop({
+                    x: 0,
+                    y: rankFillState.naturalHeight - sourceFillHeight,
+                    width: rankFillState.naturalWidth,
+                    height: sourceFillHeight,
+                });
+                rankFillImage.y(rankFillState.height - fillHeight);
+                rankFillImage.width(rankFillState.width);
+                rankFillImage.height(fillHeight);
+            }
+            rankFillImage.visible(progress > 0);
+        };
+
+        const supportedImageExtensions = ['png', 'webp', 'jpg', 'jpeg', 'bmp', 'gif', 'svg'];
+
+        const resolveTierImageBasePath = (folder: 'Tiers' | 'Text' | 'Bars' | 'Backgrounds', tier: number) =>
+            `./Assets/ComboCount/${folder}/${ranks[clamp(tier, 0, ranks.length - 1)]}`;
+
+        const getTierImageCacheKey = (basePath: string, extensions: string[]) => `${basePath}|${extensions.join(',')}`;
+
+        const isVectorAsset = (path: string) => /\.svg(?:$|[?#])/i.test(path);
+
+        const loadTierImage = (
+            folder: 'Tiers' | 'Text' | 'Bars' | 'Backgrounds',
+            tier: number,
+            extensions = supportedImageExtensions
+        ) => {
+            const basePath = resolveTierImageBasePath(folder, tier);
+            const cacheKey = getTierImageCacheKey(basePath, extensions);
+            const cached = tierImageCache.get(cacheKey);
+            if (cached) return cached.image;
+
+            const candidates = extensions.map((extension) => `${basePath}.${extension}`);
+            const entry: TierImageCandidate = { path: candidates[0], image: null, failed: false };
+            tierImageCache.set(cacheKey, entry);
+
+            let index = 0;
+            const tryNext = () => {
+                if (index >= candidates.length) {
+                    entry.failed = true;
+                    if (renderedTier === tier) {
+                        applyTierStyle();
+                        dynamicLayer.batchDraw();
+                    }
+                    return;
                 }
+
+                const path = candidates[index];
+                entry.path = path;
+                const image = new Image();
+                image.onload = () => {
+                    entry.image = image;
+                    entry.failed = false;
+                    if (renderedTier === tier) {
+                        applyTierStyle();
+                        staticLayer.batchDraw();
+                        dynamicLayer.batchDraw();
+                    }
+                };
+                image.onerror = () => {
+                    index += 1;
+                    tryNext();
+                };
+                image.src = normalizeImageSrc(path);
             };
-            image.onerror = () => {
-                imageCache.set(src, null);
-            };
-            image.src = src;
+
+            tryNext();
             return null;
         };
+
+        const tierImageFailed = (
+            folder: 'Tiers' | 'Text' | 'Bars' | 'Backgrounds',
+            tier: number,
+            extensions = supportedImageExtensions
+        ) =>
+            Boolean(tierImageCache.get(getTierImageCacheKey(resolveTierImageBasePath(folder, tier), extensions))?.failed);
+
+        const getTierImagePath = (
+            folder: 'Tiers' | 'Text' | 'Bars' | 'Backgrounds',
+            tier: number,
+            extensions = supportedImageExtensions
+        ) =>
+            tierImageCache.get(getTierImageCacheKey(resolveTierImageBasePath(folder, tier), extensions))?.path ?? '';
 
         function applyTierStyle() {
             const tier = clamp(renderedTier, 0, ranks.length - 1);
             const tierConfig = getTierConfig(tier);
             const color = colorToCss(tierConfig.letterColor);
             const backgroundColor = colorToCss(tierConfig.backgroundColor);
-            const imagePath = tierConfig.imagePath.trim();
-            const image = config.useTierImages && imagePath ? loadImage(imagePath, tier) : null;
+            const rankAsset = loadTierImage('Tiers', tier);
+            const rankAssetFailed = tierImageFailed('Tiers', tier);
+            const showTierTextLayer = usesTextProgress() && config.showTierName;
+            const textAsset = showTierTextLayer ? loadTierImage('Text', tier) : null;
+            const barAsset = usesTextProgress() ? null : loadTierImage('Bars', tier);
+            const backgroundAsset = loadTierImage('Backgrounds', tier);
 
             rankVisualGroup.clearCache();
             rankShapeState.text = ranks[tier];
@@ -387,25 +657,96 @@ function App() {
             rankShapeState.useTextProgress = usesTextProgress();
             const hudWidth = Math.max(282, getBarWidth() + 36);
             const rankX = config.showTierName ? -18 : Math.max(0, (hudWidth - 170) * 0.5);
+            const rankBoxX = usesTextProgress() ? 0 : rankX;
+            const rankBoxWidth = usesTextProgress() ? hudWidth : 170;
             rankShape.x(rankX);
-            rankImage.x(rankX + 20);
+            descText.width(hudWidth);
             descText.text(rankNames[tier]);
-            descText.visible(config.showTierName);
+            descImage.visible(Boolean(showTierTextLayer && textAsset));
+            descText.visible(Boolean(showTierTextLayer && !textAsset && tierImageFailed('Text', tier)));
             descText.fill(color);
+            if (textAsset) {
+                descImage.image(textAsset);
+                fitImageContain(descImage, textAsset, 0, 30, hudWidth, 64);
+            }
+            if (backgroundAsset) {
+                tierBackgroundImage.image(backgroundAsset);
+                fitImageContain(tierBackgroundImage, backgroundAsset, 0, -34, hudWidth, 168);
+            }
+            tierBackgroundImage.visible(Boolean(backgroundAsset));
             hitLabel.fill(tier >= 6 ? '#ffe986' : '#d2e8ff');
+            hitLabel.visible(config.showComboHits);
             barTrack.fill(backgroundColor);
             barInset.fill(backgroundColor);
             barFill.fill(color);
-
-            if (image) {
-                rankImage.image(image);
-                rankImage.visible(true);
-                rankShape.visible(false);
-            } else {
-                rankImage.visible(false);
-                rankShape.visible(true);
+            if (barAsset) {
+                barFrameImage.image(barAsset);
+                fitImageContain(barFrameImage, barAsset, 18, 126, getBarWidth(), getBarHeight());
+            }
+            barFrameImage.visible(Boolean(barAsset));
+            barTrack.visible(!barAsset);
+            barInset.visible(!barAsset);
+            staticGroup.clearCache();
+            if (staticGroup.visible()) {
+                staticGroup.cache({ pixelRatio: getCachePixelRatio() });
             }
 
+            if (rankAsset && usesTextProgress()) {
+                rankFillState.image = rankAsset;
+                rankFillState.assetPath = getTierImagePath('Tiers', tier);
+                rankFillState.isVector = isVectorAsset(rankFillState.assetPath);
+                rankFillState.naturalWidth = Math.max(1, rankAsset.naturalWidth || rankAsset.width);
+                rankFillState.naturalHeight = Math.max(1, rankAsset.naturalHeight || rankAsset.height);
+                if (rankFillState.isVector) {
+                    setRankDomVisible(false);
+                    rankBaseImage.image(rankAsset);
+                    rankBaseImage.opacity(0.28);
+                    const rankRect = fitImageContain(rankBaseImage, rankAsset, rankBoxX, -34, rankBoxWidth, 168);
+                    rankFillGroup.position({ x: rankRect.x, y: rankRect.y });
+                    rankFillState.width = rankRect.width;
+                    rankFillState.height = rankRect.height;
+                    rankFillImage.image(rankAsset);
+                    rankFillImage.opacity(1);
+                    rankFillImage.x(0);
+                    applyRankFillClip();
+                    rankBaseImage.visible(true);
+                    rankFillGroup.visible(true);
+                } else {
+                    const rankSrc = normalizeImageSrc(rankFillState.assetPath);
+                    rankDomBase.src = rankSrc;
+                    rankDomFill.src = rankSrc;
+                    fitRankDomContain(rankAsset, rankBoxX, -34, rankBoxWidth, 168);
+                    updateRankDomProgress();
+                    setRankDomVisible(true);
+                    rankBaseImage.visible(false);
+                    rankFillGroup.visible(false);
+                }
+                rankImage.visible(false);
+                rankShape.visible(false);
+            } else if (rankAsset) {
+                setRankDomVisible(false);
+                rankImage.image(rankAsset);
+                fitImageContain(rankImage, rankAsset, rankBoxX, -34, rankBoxWidth, 168);
+                rankImage.visible(true);
+                rankBaseImage.visible(false);
+                rankFillState.image = null;
+                rankFillState.assetPath = '';
+                rankFillState.isVector = false;
+                rankFillGroup.visible(false);
+                rankShape.visible(false);
+            } else {
+                setRankDomVisible(false);
+                rankImage.visible(false);
+                rankBaseImage.visible(false);
+                rankFillState.image = null;
+                rankFillState.assetPath = '';
+                rankFillState.isVector = false;
+                rankFillGroup.visible(false);
+                rankShape.visible(rankAssetFailed);
+            }
+
+            styledTier = tier;
+            styleDirty = false;
             cacheRank();
         }
 
@@ -425,9 +766,20 @@ function App() {
             targetTextFillProgress = 0;
             setHudVisible(false);
             rankVisualGroup.clearCache();
+            styledTier = -1;
+            styleDirty = true;
             rankShapeState.text = '';
             rankShapeState.progress = 0;
             rankImage.visible(false);
+            rankBaseImage.visible(false);
+            setRankDomVisible(false);
+            rankFillState.image = null;
+            rankFillState.assetPath = '';
+            rankFillState.isVector = false;
+            rankFillGroup.visible(false);
+            applyRankFillClip();
+            tierBackgroundImage.visible(false);
+            descImage.visible(false);
             descText.text('');
             hitLabel.text('');
             barFill.width(0);
@@ -440,15 +792,21 @@ function App() {
         };
 
         const renderCombo = (hitValue: number, tierValue: number, comboPoints: number, pointsRequired: number) => {
+            const nextTier = clamp(tierValue, 0, ranks.length - 1);
+            const tierChanged = nextTier !== renderedTier;
+            const hitChanged = hitValue !== renderedHitValue;
             renderedHitValue = hitValue;
-            renderedTier = clamp(tierValue, 0, ranks.length - 1);
+            renderedTier = nextTier;
             const progress = clamp(comboPoints / Math.max(1, pointsRequired), 0, 1);
             targetBarWidth = getBarFillWidth() * progress;
             targetTextFillProgress = progress;
             setHudVisible(true);
-            hitLabel.text(`${hitValue} HITS`);
-            applyTierStyle();
-            staticLayer.batchDraw();
+            if (hitChanged) {
+                hitLabel.text(`${hitValue} HITS`);
+            }
+            if (styleDirty || tierChanged || styledTier !== renderedTier) {
+                applyTierStyle();
+            }
             requestFrame();
         };
 
@@ -482,6 +840,8 @@ function App() {
                 const finalTextProgress = Math.abs(nextTextProgress - targetTextFillProgress) < 0.004 ? targetTextFillProgress : nextTextProgress;
                 if (Math.abs(finalTextProgress - currentTextProgress) > 0.001) {
                     rankShapeState.progress = finalTextProgress;
+                    applyRankFillClip();
+                    updateRankDomProgress();
                     needsFrame = true;
                 }
 
@@ -531,8 +891,8 @@ function App() {
             const next = defaultConfig();
             next.enabled = parsed.enabled !== false;
             next.showFloatingMessages = parsed.showFloatingMessages !== false;
+            next.showComboHits = parsed.showComboHits !== false;
             next.editMode = Boolean(parsed.editMode);
-            next.useTierImages = Boolean(parsed.useTierImages);
             next.useTextProgressFill = Boolean(parsed.useTextProgressFill);
             next.showTierName = parsed.showTierName !== false;
             next.positionXPercent = clamp(Number(parsed.positionXPercent ?? next.positionXPercent), 0, 100);
@@ -559,9 +919,6 @@ function App() {
                             clamp(Number(tier.backgroundColor[2]), 0, 1),
                             clamp(Number(tier.backgroundColor[3] ?? 1), 0, 1),
                         ];
-                    }
-                    if (typeof tier.imagePath === 'string') {
-                        next.tiers[i].imagePath = tier.imagePath;
                     }
                 }
             }
@@ -613,6 +970,7 @@ function App() {
                 if (!payload) return;
                 try {
                     config = parseConfig(payload);
+                    styleDirty = true;
                     positionHud();
                     if (!config.enabled) {
                         clearCombo();
@@ -649,6 +1007,9 @@ function App() {
             stage.width(window.innerWidth);
             stage.height(window.innerHeight);
             positionHud();
+            if (rankDom.style.display !== 'none') {
+                applyTierStyle();
+            }
             cacheRank();
             dynamicLayer.batchDraw();
         };
@@ -661,6 +1022,7 @@ function App() {
                 cancelAnimationFrame(animationFrameId);
             }
             bridge = null;
+            rankDom.remove();
             stage.destroy();
         });
     });

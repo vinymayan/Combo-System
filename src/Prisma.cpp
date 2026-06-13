@@ -18,10 +18,10 @@ namespace {
         writer.Bool(Settings::PlayerUI.enabled);
         writer.Key("showFloatingMessages");
         writer.Bool(Settings::PlayerUI.showFloatingMessages);
+        writer.Key("showComboHits");
+        writer.Bool(Settings::PlayerUI.showComboHits);
         writer.Key("editMode");
         writer.Bool(Settings::PlayerUI.editMode);
-        writer.Key("useTierImages");
-        writer.Bool(Settings::PlayerUI.useTierImages);
         writer.Key("useTextProgressFill");
         writer.Bool(Settings::PlayerUI.useTextProgressFill);
         writer.Key("showTierName");
@@ -54,8 +54,6 @@ namespace {
             writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[2]);
             writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[3]);
             writer.EndArray();
-            writer.Key("imagePath");
-            writer.String(Settings::PlayerUI.tiers[i].imagePath.c_str());
             writer.EndObject();
         }
         writer.EndArray();
@@ -159,10 +157,7 @@ void Prisma::UpdateCombo(int hitValue, int comboValue, int comboPoints, int poin
 
     static std::string payload;
     payload = std::to_string(hitValue) + "|" + std::to_string(comboValue) + "|" + std::to_string(comboPoints) + "|" + std::to_string(pointsPerTier);
-	logger::debug("Prisma::UpdateCombo - Enviando atualização para a UI -> Hit: {}, Tier: {}, Points: {}, Required: {}, Payload: {}", hitValue, comboValue, comboPoints, pointsPerTier, payload);
     try {
-		logger::debug("Prisma::UpdateCombo - Enviando atualização para a UI de forma segura...");
-        // Envia o ponteiro persistente e seguro de forma assíncrona
         PrismaUI->InteropCall(view, "updateComboMeter", payload.c_str());
     }
     catch (const std::exception& e) {

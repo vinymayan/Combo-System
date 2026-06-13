@@ -8,6 +8,7 @@
 namespace Sink {
     namespace {
         constexpr int kMaxComboTier = 9;
+        constexpr float kDecayUpdateInterval = 0.1f;
 
         const Settings::ComboProfileSettings& GetProfileForActor(RE::FormID actorFormID) {
             if (actorFormID == 0x14) {
@@ -192,6 +193,7 @@ namespace Sink {
             data.lastHitType = currentHitType;
             data.lastHitTime = nowTime;
             data.decayAccumulator = 0.0f;
+            data.decayUpdateAccumulator = 0.0f;
 
             ApplyTierProgression(data, profile);
             dataCopy = data;
@@ -397,6 +399,12 @@ namespace Sink {
                 }
 
                 data.decayAccumulator += deltaTime * static_cast<float>(settings.pointsLostPerSecond);
+                data.decayUpdateAccumulator += deltaTime;
+                if (data.decayUpdateAccumulator < kDecayUpdateInterval) {
+                    continue;
+                }
+
+                data.decayUpdateAccumulator = 0.0f;
                 const int pointsToLose = static_cast<int>(data.decayAccumulator);
                 if (pointsToLose <= 0) {
                     continue;

@@ -1,4 +1,4 @@
-#include "Configuration.h"
+﻿#include "Configuration.h"
 #include "Manager.h"
 #include "Prisma.h"
 
@@ -92,7 +92,7 @@ namespace ModMenu {
             changed = true;
         }
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(120.0f);
+        ImGui::SetNextItemWidth(200.0f);
         if (ImGui::InputInt(label, v)) {
             changed = true;
         }
@@ -264,14 +264,14 @@ namespace ModMenu {
         if (parent.HasMember("showFloatingMessages") && parent["showFloatingMessages"].IsBool()) {
             settings.showFloatingMessages = parent["showFloatingMessages"].GetBool();
         }
+        if (parent.HasMember("showComboHits") && parent["showComboHits"].IsBool()) {
+            settings.showComboHits = parent["showComboHits"].GetBool();
+        }
         if (parent.HasMember("enabled") && parent["enabled"].IsBool()) {
             settings.enabled = parent["enabled"].GetBool();
         }
         if (parent.HasMember("editMode") && parent["editMode"].IsBool()) {
             settings.editMode = parent["editMode"].GetBool();
-        }
-        if (parent.HasMember("useTierImages") && parent["useTierImages"].IsBool()) {
-            settings.useTierImages = parent["useTierImages"].GetBool();
         }
         if (parent.HasMember("useTextProgressFill") && parent["useTextProgressFill"].IsBool()) {
             settings.useTextProgressFill = parent["useTextProgressFill"].GetBool();
@@ -326,9 +326,6 @@ namespace ModMenu {
                             colorIndex++;
                         }
                     }
-                    if (tierValue.HasMember("imagePath") && tierValue["imagePath"].IsString()) {
-                        settings.tiers[idx].imagePath = tierValue["imagePath"].GetString();
-                    }
                 }
                 idx++;
             }
@@ -344,8 +341,8 @@ namespace ModMenu {
         parent.SetObject();
         parent.AddMember("enabled", settings.enabled, alloc);
         parent.AddMember("showFloatingMessages", settings.showFloatingMessages, alloc);
+        parent.AddMember("showComboHits", settings.showComboHits, alloc);
         parent.AddMember("editMode", settings.editMode, alloc);
-        parent.AddMember("useTierImages", settings.useTierImages, alloc);
         parent.AddMember("useTextProgressFill", settings.useTextProgressFill, alloc);
         parent.AddMember("showTierName", settings.showTierName, alloc);
         parent.AddMember("positionXPercent", settings.positionXPercent, alloc);
@@ -370,7 +367,6 @@ namespace ModMenu {
                 backgroundColor.PushBack(component, alloc);
             }
             tierObj.AddMember("backgroundColor", backgroundColor, alloc);
-            tierObj.AddMember("imagePath", rapidjson::Value(settings.tiers[i].imagePath.c_str(), alloc).Move(), alloc);
 
             tiers.PushBack(tierObj, alloc);
         }
@@ -549,10 +545,10 @@ namespace ModMenu {
         if (ImGui::Checkbox(GetLoc("menu.show_floating_messages", "Show floating combo messages"), &ui.showFloatingMessages)) {
             changed = true;
         }
-        if (ImGui::Checkbox(GetLoc("menu.ui_edit_mode", "Combo UI edit mode"), &ui.editMode)) {
+        if (ImGui::Checkbox(GetLoc("menu.show_combo_hits", "Show combo hits"), &ui.showComboHits)) {
             changed = true;
         }
-        if (ImGui::Checkbox(GetLoc("menu.use_tier_images", "Use tier images instead of tier text"), &ui.useTierImages)) {
+        if (ImGui::Checkbox(GetLoc("menu.ui_edit_mode", "Combo UI edit mode"), &ui.editMode)) {
             changed = true;
         }
         if (ImGui::Checkbox(GetLoc("menu.use_text_progress_fill", "Fill tier text instead of showing progress bar"), &ui.useTextProgressFill)) {
@@ -598,13 +594,6 @@ namespace ModMenu {
                     changed = true;
                 }
                 if (ImGui::ColorEdit4(GetLoc("menu.tier_background_color", "Tier background color"), ui.tiers[i].backgroundColor.data())) {
-                    changed = true;
-                }
-
-                char pathBuf[512]{};
-                strcpy_s(pathBuf, ui.tiers[i].imagePath.c_str());
-                if (ImGui::InputText(GetLoc("menu.tier_image_path", "Tier image path"), pathBuf, sizeof(pathBuf))) {
-                    ui.tiers[i].imagePath = pathBuf;
                     changed = true;
                 }
 

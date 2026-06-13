@@ -23,6 +23,7 @@ namespace Sink {
         HitType lastHitType = HitType::None;
         std::chrono::steady_clock::time_point lastHitTime; // PROPRIEDADE NOVA: Guarda o timestamp preciso do último golpe
         float decayAccumulator = 0.0f;
+        float decayUpdateAccumulator = 0.0f;
     };
 
     class ComboManager {

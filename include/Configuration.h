@@ -56,14 +56,13 @@ namespace Settings {
     struct TierVisualSettings {
         std::array<float, 4> letterColor{ 0.87f, 0.91f, 0.96f, 1.0f };
         std::array<float, 4> backgroundColor{ 0.02f, 0.02f, 0.02f, 0.55f };
-        std::string imagePath;
     };
 
     struct PlayerUISettings {
         bool enabled = true;
         bool showFloatingMessages = true;
+        bool showComboHits = true;
         bool editMode = false;
-        bool useTierImages = false;
         bool useTextProgressFill = false;
         bool showTierName = true;
         int positionXPercent = 83;
