@@ -23,8 +23,8 @@ add_include_folder(vendor/include)
 
 cmake_minimum_required(VERSION 3.21)
 set(AUTHOR_NAME "Viny")
-set(PRODUCT_NAME "ComboCount")
-set(BEAUTIFUL_NAME "Combo Count")
+set(PRODUCT_NAME "ComboSystem")
+set(BEAUTIFUL_NAME "Combo System")
 
 project(${PRODUCT_NAME} VERSION 3.0.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)

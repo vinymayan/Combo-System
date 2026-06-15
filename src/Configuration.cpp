@@ -11,28 +11,39 @@
 namespace Settings {
     PlayerUISettings::PlayerUISettings() {
         const std::array<std::array<float, 4>, kComboTierCount> colors{ {
-            { 0.87f, 0.91f, 0.96f, 1.0f },
-            { 0.87f, 0.91f, 0.96f, 1.0f },
-            { 0.87f, 0.91f, 0.96f, 1.0f },
-            { 0.66f, 0.84f, 1.00f, 1.0f },
-            { 0.56f, 0.78f, 1.00f, 1.0f },
-            { 0.44f, 0.72f, 1.00f, 1.0f },
-            { 1.00f, 0.85f, 0.16f, 1.0f },
-            { 1.00f, 0.88f, 0.23f, 1.0f },
-            { 1.00f, 0.94f, 0.30f, 1.0f },
-            { 1.00f, 0.94f, 0.42f, 1.0f }
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f },
+            { 1.00f, 1.00f, 1.00f, 1.0f }
+        } };
+        const std::array<const char*, kComboTierCount> defaultTierTexts{ {
+            "Fierce", "Exalted", "Dauntless", "Champion", "Brilliant", "Ascendant", "Sovereign!", "Supreme Skill!", "Stellar S Style!", "Zusk!"
         } };
 
         for (int i = 0; i < kComboTierCount; i++) {
+            tiers[i].tierText = defaultTierTexts[i];
             tiers[i].letterColor = colors[i];
+            tiers[i].tierEmptyColor = { 46.0f / 255.0f, 51.0f / 255.0f, 61.0f / 255.0f, 166.0f / 255.0f };
+            tiers[i].textColor = colors[i];
+            tiers[i].numberColor = { 229.0f / 255.0f, 229.0f / 255.0f, 229.0f / 255.0f, 1.0f };
+            tiers[i].backgroundColor = { 5.0f / 255.0f, 5.0f / 255.0f, 5.0f / 255.0f, 140.0f / 255.0f };
         }
     }
 }
 
 namespace ModMenu {
-    constexpr const char* SETTINGS_PATH = "Data/SKSE/Plugins/ComboCount/Settings.json";
-    constexpr const char* LANG_PATH = "Data/SKSE/Plugins/ComboCount/Language.json";
-    const std::string RULES_DIR = "Data/SKSE/Plugins/ComboCount/Rules/";
+    constexpr const char* SETTINGS_PATH = "Data/Viny Mods/Combo System/Settings.json";
+    constexpr const char* PLAYER_SETTINGS_PATH = "Data/Viny Mods/Combo System/PlayerSettings.json";
+    constexpr const char* NPC_SETTINGS_PATH = "Data/Viny Mods/Combo System/NPCSettings.json";
+    constexpr const char* UI_SETTINGS_PATH = "Data/Viny Mods/Combo System/UISettings.json";
+    constexpr const char* LANG_PATH = "Data/Viny Mods/Combo System/Language.json";
+    const std::string RULES_DIR = "Data/Viny Mods/Combo System/Rules/";
     static std::unordered_map<std::string, std::string> LangMap;
 
     void LoadLanguage() {
@@ -40,7 +51,7 @@ namespace ModMenu {
 
         std::ifstream file(LANG_PATH, std::ios::binary);
         if (!file.is_open()) {
-            logger::warn("Combo Count language file not found. Falling back to default text.");
+            logger::warn("Combo System language file not found. Falling back to default text.");
             return;
         }
 
@@ -107,6 +118,31 @@ namespace ModMenu {
 
         ImGui::PopID();
         return changed;
+    }
+
+    static bool RenderFontWeightCombo(const char* label, int& value) {
+        bool changed = false;
+        const char* items[] = {
+            GetLoc("menu.font_weight_light", "Light"),
+            GetLoc("menu.font_weight_medium", "Medium"),
+            GetLoc("menu.font_weight_bold", "Bold")
+        };
+        value = std::clamp(value, 0, 2);
+        constexpr int itemCount = static_cast<int>(std::size(items));
+        if (ImGui::Combo(label, &value, items, itemCount)) {
+            changed = true;
+        }
+        return changed;
+    }
+
+    static bool RenderStringInput(const char* label, std::string& value) {
+        char buffer[128];
+        strcpy_s(buffer, value.c_str());
+        if (ImGui::InputText(label, buffer, sizeof(buffer))) {
+            value = buffer;
+            return true;
+        }
+        return false;
     }
 
     static bool DrawDropdown(const char* label, const std::string& category, RE::FormID& currentFormID, float customWidth = -1.0f) {
@@ -246,13 +282,44 @@ namespace ModMenu {
         settings.scalePercent = std::clamp(settings.scalePercent, 40, 300);
         settings.progressBarWidth = std::clamp(settings.progressBarWidth, 60, 600);
         settings.progressBarHeight = std::clamp(settings.progressBarHeight, 6, 60);
+        settings.comboLabelYOffset = std::clamp(settings.comboLabelYOffset, -300, 300);
+        settings.comboNumberYOffset = std::clamp(settings.comboNumberYOffset, -300, 300);
+        settings.tierYOffset = std::clamp(settings.tierYOffset, -300, 300);
+        settings.tierTextYOffset = std::clamp(settings.tierTextYOffset, -300, 300);
+        settings.progressBarYOffset = std::clamp(settings.progressBarYOffset, -300, 300);
+        settings.comboHitsYOffset = std::clamp(settings.comboHitsYOffset, -300, 300);
+        settings.backgroundScalePercent = std::clamp(settings.backgroundScalePercent, 25, 300);
+        settings.comboLabelScalePercent = std::clamp(settings.comboLabelScalePercent, 25, 300);
+        settings.comboNumberScalePercent = std::clamp(settings.comboNumberScalePercent, 25, 300);
+        settings.tierScalePercent = std::clamp(settings.tierScalePercent, 25, 300);
+        settings.tierTextScalePercent = std::clamp(settings.tierTextScalePercent, 25, 300);
+        settings.progressBarScalePercent = std::clamp(settings.progressBarScalePercent, 25, 300);
+        settings.comboHitsScalePercent = std::clamp(settings.comboHitsScalePercent, 25, 300);
+        settings.progressDisplayMode = std::clamp(settings.progressDisplayMode, 0, 3);
+        for (auto& component : settings.notificationPositiveColor) {
+            component = std::clamp(component, 0.0f, 1.0f);
+        }
+        for (auto& component : settings.notificationNegativeColor) {
+            component = std::clamp(component, 0.0f, 1.0f);
+        }
         for (auto& tier : settings.tiers) {
             for (auto& component : tier.letterColor) {
+                component = std::clamp(component, 0.0f, 1.0f);
+            }
+            for (auto& component : tier.tierEmptyColor) {
+                component = std::clamp(component, 0.0f, 1.0f);
+            }
+            for (auto& component : tier.textColor) {
+                component = std::clamp(component, 0.0f, 1.0f);
+            }
+            for (auto& component : tier.numberColor) {
                 component = std::clamp(component, 0.0f, 1.0f);
             }
             for (auto& component : tier.backgroundColor) {
                 component = std::clamp(component, 0.0f, 1.0f);
             }
+            tier.textFontWeight = std::clamp(tier.textFontWeight, 0, 2);
+            tier.numberFontWeight = std::clamp(tier.numberFontWeight, 0, 2);
         }
     }
 
@@ -267,14 +334,22 @@ namespace ModMenu {
         if (parent.HasMember("showComboHits") && parent["showComboHits"].IsBool()) {
             settings.showComboHits = parent["showComboHits"].GetBool();
         }
+        if (parent.HasMember("showComboNumber") && parent["showComboNumber"].IsBool()) {
+            settings.showComboNumber = parent["showComboNumber"].GetBool();
+        }
+        if (parent.HasMember("showTotalComboPoints") && parent["showTotalComboPoints"].IsBool()) {
+            settings.showTotalComboPoints = parent["showTotalComboPoints"].GetBool();
+        }
         if (parent.HasMember("enabled") && parent["enabled"].IsBool()) {
             settings.enabled = parent["enabled"].GetBool();
         }
         if (parent.HasMember("editMode") && parent["editMode"].IsBool()) {
             settings.editMode = parent["editMode"].GetBool();
         }
-        if (parent.HasMember("useTextProgressFill") && parent["useTextProgressFill"].IsBool()) {
-            settings.useTextProgressFill = parent["useTextProgressFill"].GetBool();
+        if (parent.HasMember("progressDisplayMode") && parent["progressDisplayMode"].IsInt()) {
+            settings.progressDisplayMode = parent["progressDisplayMode"].GetInt();
+        } else if (parent.HasMember("useTextProgressFill") && parent["useTextProgressFill"].IsBool()) {
+            settings.progressDisplayMode = parent["useTextProgressFill"].GetBool() ? 2 : 1;
         }
         if (parent.HasMember("showTierName") && parent["showTierName"].IsBool()) {
             settings.showTierName = parent["showTierName"].GetBool();
@@ -294,6 +369,77 @@ namespace ModMenu {
         if (parent.HasMember("progressBarHeight") && parent["progressBarHeight"].IsInt()) {
             settings.progressBarHeight = parent["progressBarHeight"].GetInt();
         }
+        if (parent.HasMember("comboLabelYOffset") && parent["comboLabelYOffset"].IsInt()) {
+            settings.comboLabelYOffset = parent["comboLabelYOffset"].GetInt();
+        }
+        if (parent.HasMember("comboNumberYOffset") && parent["comboNumberYOffset"].IsInt()) {
+            settings.comboNumberYOffset = parent["comboNumberYOffset"].GetInt();
+        }
+        if (parent.HasMember("tierYOffset") && parent["tierYOffset"].IsInt()) {
+            settings.tierYOffset = parent["tierYOffset"].GetInt();
+        }
+        if (parent.HasMember("tierTextYOffset") && parent["tierTextYOffset"].IsInt()) {
+            settings.tierTextYOffset = parent["tierTextYOffset"].GetInt();
+        }
+        if (parent.HasMember("progressBarYOffset") && parent["progressBarYOffset"].IsInt()) {
+            settings.progressBarYOffset = parent["progressBarYOffset"].GetInt();
+        }
+        if (parent.HasMember("comboHitsYOffset") && parent["comboHitsYOffset"].IsInt()) {
+            settings.comboHitsYOffset = parent["comboHitsYOffset"].GetInt();
+        }
+        if (parent.HasMember("backgroundScalePercent") && parent["backgroundScalePercent"].IsInt()) {
+            settings.backgroundScalePercent = parent["backgroundScalePercent"].GetInt();
+        }
+        if (parent.HasMember("comboLabelScalePercent") && parent["comboLabelScalePercent"].IsInt()) {
+            settings.comboLabelScalePercent = parent["comboLabelScalePercent"].GetInt();
+        }
+        if (parent.HasMember("comboNumberScalePercent") && parent["comboNumberScalePercent"].IsInt()) {
+            settings.comboNumberScalePercent = parent["comboNumberScalePercent"].GetInt();
+        }
+        if (parent.HasMember("tierScalePercent") && parent["tierScalePercent"].IsInt()) {
+            settings.tierScalePercent = parent["tierScalePercent"].GetInt();
+        }
+        if (parent.HasMember("tierTextScalePercent") && parent["tierTextScalePercent"].IsInt()) {
+            settings.tierTextScalePercent = parent["tierTextScalePercent"].GetInt();
+        }
+        if (parent.HasMember("progressBarScalePercent") && parent["progressBarScalePercent"].IsInt()) {
+            settings.progressBarScalePercent = parent["progressBarScalePercent"].GetInt();
+        }
+        if (parent.HasMember("comboHitsScalePercent") && parent["comboHitsScalePercent"].IsInt()) {
+            settings.comboHitsScalePercent = parent["comboHitsScalePercent"].GetInt();
+        }
+        if (parent.HasMember("notificationPositiveColor") && parent["notificationPositiveColor"].IsArray()) {
+            int colorIndex = 0;
+            for (const auto& component : parent["notificationPositiveColor"].GetArray()) {
+                if (colorIndex >= 4) break;
+                if (component.IsNumber()) settings.notificationPositiveColor[colorIndex] = component.GetFloat();
+                colorIndex++;
+            }
+        }
+        if (parent.HasMember("notificationNegativeColor") && parent["notificationNegativeColor"].IsArray()) {
+            int colorIndex = 0;
+            for (const auto& component : parent["notificationNegativeColor"].GetArray()) {
+                if (colorIndex >= 4) break;
+                if (component.IsNumber()) settings.notificationNegativeColor[colorIndex] = component.GetFloat();
+                colorIndex++;
+            }
+        }
+        if (parent.HasMember("showNotificationValue") && parent["showNotificationValue"].IsBool()) settings.showNotificationValue = parent["showNotificationValue"].GetBool();
+        if (parent.HasMember("notificationHitText") && parent["notificationHitText"].IsString()) settings.notificationHitText = parent["notificationHitText"].GetString();
+        if (parent.HasMember("notificationHitTakenText") && parent["notificationHitTakenText"].IsString()) settings.notificationHitTakenText = parent["notificationHitTakenText"].GetString();
+        if (parent.HasMember("notificationDodgeText") && parent["notificationDodgeText"].IsString()) settings.notificationDodgeText = parent["notificationDodgeText"].GetString();
+        if (parent.HasMember("notificationPerfectDodgeText") && parent["notificationPerfectDodgeText"].IsString()) settings.notificationPerfectDodgeText = parent["notificationPerfectDodgeText"].GetString();
+        if (parent.HasMember("notificationDodgedText") && parent["notificationDodgedText"].IsString()) settings.notificationDodgedText = parent["notificationDodgedText"].GetString();
+        if (parent.HasMember("notificationPerfectDodgedText") && parent["notificationPerfectDodgedText"].IsString()) settings.notificationPerfectDodgedText = parent["notificationPerfectDodgedText"].GetString();
+        if (parent.HasMember("notificationParryText") && parent["notificationParryText"].IsString()) settings.notificationParryText = parent["notificationParryText"].GetString();
+        if (parent.HasMember("notificationPerfectParryText") && parent["notificationPerfectParryText"].IsString()) settings.notificationPerfectParryText = parent["notificationPerfectParryText"].GetString();
+        if (parent.HasMember("notificationParriedText") && parent["notificationParriedText"].IsString()) settings.notificationParriedText = parent["notificationParriedText"].GetString();
+        if (parent.HasMember("notificationPerfectParriedText") && parent["notificationPerfectParriedText"].IsString()) settings.notificationPerfectParriedText = parent["notificationPerfectParriedText"].GetString();
+        if (parent.HasMember("notificationUndodgeableText") && parent["notificationUndodgeableText"].IsString()) settings.notificationUndodgeableText = parent["notificationUndodgeableText"].GetString();
+        if (parent.HasMember("notificationUndodgeableHitText") && parent["notificationUndodgeableHitText"].IsString()) settings.notificationUndodgeableHitText = parent["notificationUndodgeableHitText"].GetString();
+        if (parent.HasMember("notificationUnblockableText") && parent["notificationUnblockableText"].IsString()) settings.notificationUnblockableText = parent["notificationUnblockableText"].GetString();
+        if (parent.HasMember("notificationUnblockableHitText") && parent["notificationUnblockableHitText"].IsString()) settings.notificationUnblockableHitText = parent["notificationUnblockableHitText"].GetString();
+        if (parent.HasMember("notificationStaggerText") && parent["notificationStaggerText"].IsString()) settings.notificationStaggerText = parent["notificationStaggerText"].GetString();
 
         if (parent.HasMember("tiers") && parent["tiers"].IsArray()) {
             int idx = 0;
@@ -302,6 +448,9 @@ namespace ModMenu {
                     break;
                 }
                 if (tierValue.IsObject()) {
+                    if (tierValue.HasMember("tierText") && tierValue["tierText"].IsString()) {
+                        settings.tiers[idx].tierText = tierValue["tierText"].GetString();
+                    }
                     if (tierValue.HasMember("letterColor") && tierValue["letterColor"].IsArray()) {
                         int colorIndex = 0;
                         for (const auto& component : tierValue["letterColor"].GetArray()) {
@@ -326,6 +475,54 @@ namespace ModMenu {
                             colorIndex++;
                         }
                     }
+                    if (tierValue.HasMember("tierEmptyColor") && tierValue["tierEmptyColor"].IsArray()) {
+                        int colorIndex = 0;
+                        for (const auto& component : tierValue["tierEmptyColor"].GetArray()) {
+                            if (colorIndex >= 4) {
+                                break;
+                            }
+                            if (component.IsNumber()) {
+                                settings.tiers[idx].tierEmptyColor[colorIndex] = component.GetFloat();
+                            }
+                            colorIndex++;
+                        }
+                    }
+                    if (tierValue.HasMember("textColor") && tierValue["textColor"].IsArray()) {
+                        int colorIndex = 0;
+                        for (const auto& component : tierValue["textColor"].GetArray()) {
+                            if (colorIndex >= 4) {
+                                break;
+                            }
+                            if (component.IsNumber()) {
+                                settings.tiers[idx].textColor[colorIndex] = component.GetFloat();
+                            }
+                            colorIndex++;
+                        }
+                    }
+                    if (tierValue.HasMember("numberColor") && tierValue["numberColor"].IsArray()) {
+                        int colorIndex = 0;
+                        for (const auto& component : tierValue["numberColor"].GetArray()) {
+                            if (colorIndex >= 4) {
+                                break;
+                            }
+                            if (component.IsNumber()) {
+                                settings.tiers[idx].numberColor[colorIndex] = component.GetFloat();
+                            }
+                            colorIndex++;
+                        }
+                    }
+                    if (tierValue.HasMember("textFontWeight") && tierValue["textFontWeight"].IsInt()) {
+                        settings.tiers[idx].textFontWeight = tierValue["textFontWeight"].GetInt();
+                    }
+                    if (tierValue.HasMember("numberFontWeight") && tierValue["numberFontWeight"].IsInt()) {
+                        settings.tiers[idx].numberFontWeight = tierValue["numberFontWeight"].GetInt();
+                    }
+                    if (tierValue.HasMember("textAllCaps") && tierValue["textAllCaps"].IsBool()) {
+                        settings.tiers[idx].textAllCaps = tierValue["textAllCaps"].GetBool();
+                    }
+                    if (tierValue.HasMember("numberAllCaps") && tierValue["numberAllCaps"].IsBool()) {
+                        settings.tiers[idx].numberAllCaps = tierValue["numberAllCaps"].GetBool();
+                    }
                 }
                 idx++;
             }
@@ -342,19 +539,61 @@ namespace ModMenu {
         parent.AddMember("enabled", settings.enabled, alloc);
         parent.AddMember("showFloatingMessages", settings.showFloatingMessages, alloc);
         parent.AddMember("showComboHits", settings.showComboHits, alloc);
+        parent.AddMember("showComboNumber", settings.showComboNumber, alloc);
+        parent.AddMember("showTotalComboPoints", settings.showTotalComboPoints, alloc);
         parent.AddMember("editMode", settings.editMode, alloc);
-        parent.AddMember("useTextProgressFill", settings.useTextProgressFill, alloc);
+        parent.AddMember("progressDisplayMode", settings.progressDisplayMode, alloc);
         parent.AddMember("showTierName", settings.showTierName, alloc);
         parent.AddMember("positionXPercent", settings.positionXPercent, alloc);
         parent.AddMember("positionYPercent", settings.positionYPercent, alloc);
         parent.AddMember("scalePercent", settings.scalePercent, alloc);
         parent.AddMember("progressBarWidth", settings.progressBarWidth, alloc);
         parent.AddMember("progressBarHeight", settings.progressBarHeight, alloc);
+        parent.AddMember("comboLabelYOffset", settings.comboLabelYOffset, alloc);
+        parent.AddMember("comboNumberYOffset", settings.comboNumberYOffset, alloc);
+        parent.AddMember("tierYOffset", settings.tierYOffset, alloc);
+        parent.AddMember("tierTextYOffset", settings.tierTextYOffset, alloc);
+        parent.AddMember("progressBarYOffset", settings.progressBarYOffset, alloc);
+        parent.AddMember("comboHitsYOffset", settings.comboHitsYOffset, alloc);
+        parent.AddMember("backgroundScalePercent", settings.backgroundScalePercent, alloc);
+        parent.AddMember("comboLabelScalePercent", settings.comboLabelScalePercent, alloc);
+        parent.AddMember("comboNumberScalePercent", settings.comboNumberScalePercent, alloc);
+        parent.AddMember("tierScalePercent", settings.tierScalePercent, alloc);
+        parent.AddMember("tierTextScalePercent", settings.tierTextScalePercent, alloc);
+        parent.AddMember("progressBarScalePercent", settings.progressBarScalePercent, alloc);
+        parent.AddMember("comboHitsScalePercent", settings.comboHitsScalePercent, alloc);
+        rapidjson::Value notificationPositiveColor(rapidjson::kArrayType);
+        for (float component : settings.notificationPositiveColor) {
+            notificationPositiveColor.PushBack(component, alloc);
+        }
+        parent.AddMember("notificationPositiveColor", notificationPositiveColor, alloc);
+        rapidjson::Value notificationNegativeColor(rapidjson::kArrayType);
+        for (float component : settings.notificationNegativeColor) {
+            notificationNegativeColor.PushBack(component, alloc);
+        }
+        parent.AddMember("notificationNegativeColor", notificationNegativeColor, alloc);
+        parent.AddMember("showNotificationValue", settings.showNotificationValue, alloc);
+        parent.AddMember("notificationHitText", rapidjson::Value(settings.notificationHitText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationHitTakenText", rapidjson::Value(settings.notificationHitTakenText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationDodgeText", rapidjson::Value(settings.notificationDodgeText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationPerfectDodgeText", rapidjson::Value(settings.notificationPerfectDodgeText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationDodgedText", rapidjson::Value(settings.notificationDodgedText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationPerfectDodgedText", rapidjson::Value(settings.notificationPerfectDodgedText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationParryText", rapidjson::Value(settings.notificationParryText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationPerfectParryText", rapidjson::Value(settings.notificationPerfectParryText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationParriedText", rapidjson::Value(settings.notificationParriedText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationPerfectParriedText", rapidjson::Value(settings.notificationPerfectParriedText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationUndodgeableText", rapidjson::Value(settings.notificationUndodgeableText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationUndodgeableHitText", rapidjson::Value(settings.notificationUndodgeableHitText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationUnblockableText", rapidjson::Value(settings.notificationUnblockableText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationUnblockableHitText", rapidjson::Value(settings.notificationUnblockableHitText.c_str(), alloc).Move(), alloc);
+        parent.AddMember("notificationStaggerText", rapidjson::Value(settings.notificationStaggerText.c_str(), alloc).Move(), alloc);
 
         rapidjson::Value tiers(rapidjson::kArrayType);
         for (int i = 0; i < Settings::kComboTierCount; i++) {
             rapidjson::Value tierObj(rapidjson::kObjectType);
             tierObj.AddMember("name", rapidjson::Value(Settings::ComboTierNames[i], alloc).Move(), alloc);
+            tierObj.AddMember("tierText", rapidjson::Value(settings.tiers[i].tierText.c_str(), alloc).Move(), alloc);
 
             rapidjson::Value color(rapidjson::kArrayType);
             for (float component : settings.tiers[i].letterColor) {
@@ -362,11 +601,33 @@ namespace ModMenu {
             }
             tierObj.AddMember("letterColor", color, alloc);
 
+            rapidjson::Value tierEmptyColor(rapidjson::kArrayType);
+            for (float component : settings.tiers[i].tierEmptyColor) {
+                tierEmptyColor.PushBack(component, alloc);
+            }
+            tierObj.AddMember("tierEmptyColor", tierEmptyColor, alloc);
+
+            rapidjson::Value textColor(rapidjson::kArrayType);
+            for (float component : settings.tiers[i].textColor) {
+                textColor.PushBack(component, alloc);
+            }
+            tierObj.AddMember("textColor", textColor, alloc);
+
+            rapidjson::Value numberColor(rapidjson::kArrayType);
+            for (float component : settings.tiers[i].numberColor) {
+                numberColor.PushBack(component, alloc);
+            }
+            tierObj.AddMember("numberColor", numberColor, alloc);
+
             rapidjson::Value backgroundColor(rapidjson::kArrayType);
             for (float component : settings.tiers[i].backgroundColor) {
                 backgroundColor.PushBack(component, alloc);
             }
             tierObj.AddMember("backgroundColor", backgroundColor, alloc);
+            tierObj.AddMember("textFontWeight", settings.tiers[i].textFontWeight, alloc);
+            tierObj.AddMember("numberFontWeight", settings.tiers[i].numberFontWeight, alloc);
+            tierObj.AddMember("textAllCaps", settings.tiers[i].textAllCaps, alloc);
+            tierObj.AddMember("numberAllCaps", settings.tiers[i].numberAllCaps, alloc);
 
             tiers.PushBack(tierObj, alloc);
         }
@@ -458,35 +719,52 @@ namespace ModMenu {
     static bool RenderTierSettings(Settings::TierSettings& settings) {
         bool changed = false;
 
+        ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_progress_header", "Tier Progress"));
         if (RenderIntSliderWithInput(GetLoc("menu.points_per_tier", "Combo points required to advance tier"), &settings.pointsPerTier, 1, 2000)) changed = true;
+        if (ImGui::Checkbox(GetLoc("menu.require_min_hits_for_tier", "Require a minimum hit count to advance tier"), &settings.requireMinHitsForTier)) changed = true;
+        if (settings.requireMinHitsForTier) {
+            if (RenderIntSliderWithInput(GetLoc("menu.min_hits_for_tier", "Minimum hits required to advance tier"), &settings.minHitsForTier, 1, 500)) changed = true;
+        }
+
+        ImGui::Separator();
+        ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_hit_points_header", "Hit Points"));
         if (RenderIntSliderWithInput(GetLoc("menu.base_hit_points", "Base hit points"), &settings.baseHitPoints, 0, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.repeat_hit_points", "Repeated hit points"), &settings.repeatHitPoints, 0, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.varied_hit_points", "Varied hit points"), &settings.variedHitPoints, 0, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.get_hit_penalty", "Penalty when actor is hit"), &settings.getHitPenalty, 0, 500)) changed = true;
+
+        ImGui::Separator();
+        ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_source_bonus_header", "Weapon/Magic Change Bonuses"));
         if (RenderIntSliderWithInput(GetLoc("menu.source_change_bonus", "Bonus when weapon/magic changes"), &settings.sourceChangeBonus, 0, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.source_type_change_bonus", "Bonus when weapon/magic type changes"), &settings.sourceTypeChangeBonus, 0, 500)) changed = true;
+
+        ImGui::Separator();
+        ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_dodge_events_header", "Dodge Events"));
         if (RenderIntSliderWithInput(GetLoc("menu.dodge_points", "Dodge event points"), &settings.dodgePoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.perfect_dodge_points", "Perfect dodge event points"), &settings.perfectDodgePoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.got_dodged_points", "Got dodged event points"), &settings.gotDodgedPoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.got_perfect_dodged_points", "Got perfect dodged event points"), &settings.gotPerfectDodgedPoints, -500, 500)) changed = true;
+
+        ImGui::Separator();
+        ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_parry_events_header", "Parry Events"));
         if (RenderIntSliderWithInput(GetLoc("menu.parry_points", "Parry event points"), &settings.parryPoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.perfect_parry_points", "Perfect parry event points"), &settings.perfectParryPoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.got_parried_points", "Got parried event points"), &settings.gotParriedPoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.got_perfect_parried_points", "Got perfect parried event points"), &settings.gotPerfectParriedPoints, -500, 500)) changed = true;
+
+        ImGui::Separator();
+        ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_special_events_header", "Special Events"));
         if (RenderIntSliderWithInput(GetLoc("menu.undodgeable_hit_points", "Undodgeable hit event points"), &settings.undodgeableHitPoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.hit_by_undodgeable_points", "Hit by undodgeable event points"), &settings.hitByUndodgeablePoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.unblockable_hit_points", "Unblockable hit event points"), &settings.unblockableHitPoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.hit_by_unblockable_points", "Hit by unblockable event points"), &settings.hitByUnblockablePoints, -500, 500)) changed = true;
         if (RenderIntSliderWithInput(GetLoc("menu.stagger_start_points", "Stagger start event points"), &settings.staggerStartPoints, -500, 500)) changed = true;
 
+        ImGui::Separator();
+        ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_decay_header", "Decay"));
         if (ImGui::Checkbox(GetLoc("menu.lose_points_per_second", "Lose combo points per second"), &settings.losePointsPerSecond)) changed = true;
         if (settings.losePointsPerSecond) {
             if (RenderIntSliderWithInput(GetLoc("menu.points_lost_per_second", "Combo points lost per second"), &settings.pointsLostPerSecond, 0, 500)) changed = true;
-        }
-
-        if (ImGui::Checkbox(GetLoc("menu.require_min_hits_for_tier", "Require a minimum hit count to advance tier"), &settings.requireMinHitsForTier)) changed = true;
-        if (settings.requireMinHitsForTier) {
-            if (RenderIntSliderWithInput(GetLoc("menu.min_hits_for_tier", "Minimum hits required to advance tier"), &settings.minHitsForTier, 1, 500)) changed = true;
         }
 
         ClampTierSettings(settings);
@@ -533,54 +811,127 @@ namespace ModMenu {
         bool changed = false;
         auto& ui = Settings::PlayerUI;
 
-        if (ImGui::Checkbox(GetLoc("menu.ui_enabled", "Enable combo UI"), &ui.enabled)) {
-            changed = true;
-        }
-        if (!ui.enabled) {
-            ImGui::Text("%s", GetLoc("menu.ui_disabled_hint", "Combo UI is disabled."));
-            ClampPlayerUISettings(ui);
-            return changed;
-        }
-
-        if (ImGui::Checkbox(GetLoc("menu.show_floating_messages", "Show floating combo messages"), &ui.showFloatingMessages)) {
-            changed = true;
-        }
-        if (ImGui::Checkbox(GetLoc("menu.show_combo_hits", "Show combo hits"), &ui.showComboHits)) {
-            changed = true;
-        }
-        if (ImGui::Checkbox(GetLoc("menu.ui_edit_mode", "Combo UI edit mode"), &ui.editMode)) {
-            changed = true;
-        }
-        if (ImGui::Checkbox(GetLoc("menu.use_text_progress_fill", "Fill tier text instead of showing progress bar"), &ui.useTextProgressFill)) {
-            changed = true;
-        }
-        if (ImGui::Checkbox(GetLoc("menu.show_tier_name", "Show tier name text"), &ui.showTierName)) {
-            changed = true;
+        if (ImGui::CollapsingHeader(GetLoc("menu.ui_general_header", "General"))) {
+            ImGui::Indent();
+            if (ImGui::Checkbox(GetLoc("menu.ui_enabled", "Enable combo UI"), &ui.enabled)) changed = true;
+            if (!ui.enabled) {
+                ImGui::Text("%s", GetLoc("menu.ui_disabled_hint", "Combo UI is disabled."));
+                ImGui::Unindent();
+                ClampPlayerUISettings(ui);
+                return changed;
+            }
+            if (ImGui::Checkbox(GetLoc("menu.ui_edit_mode", "Combo UI edit mode"), &ui.editMode)) changed = true;
+            if (ImGui::Checkbox(GetLoc("menu.show_combo_number", "Show combo number"), &ui.showComboNumber)) changed = true;
+            if (ImGui::Checkbox(GetLoc("menu.show_total_combo_points", "Show total combo points"), &ui.showTotalComboPoints)) changed = true;
+            if (ImGui::Checkbox(GetLoc("menu.show_tier_name", "Show tier name text"), &ui.showTierName)) changed = true;
+            if (ImGui::Checkbox(GetLoc("menu.show_combo_hits", "Show combo hits"), &ui.showComboHits)) changed = true;
+            if (ImGui::Checkbox(GetLoc("menu.show_floating_messages", "Show floating combo messages"), &ui.showFloatingMessages)) changed = true;
+            ImGui::Unindent();
         }
 
-        if (RenderIntSliderWithInput(GetLoc("menu.ui_position_x", "Combo UI horizontal position (%)"), &ui.positionXPercent, 0, 100)) {
-            changed = true;
+        if (ImGui::CollapsingHeader(GetLoc("menu.ui_progress_header", "Progress"))) {
+            ImGui::Indent();
+            const char* progressModes[] = {
+                GetLoc("menu.progress_display_none", "None"),
+                GetLoc("menu.progress_display_bar", "Bar"),
+                GetLoc("menu.progress_display_tier", "Tier"),
+                GetLoc("menu.progress_display_both", "Both")
+            };
+            ui.progressDisplayMode = std::clamp(ui.progressDisplayMode, 0, 3);
+            if (ImGui::Combo(GetLoc("menu.progress_display_mode", "Progress display mode"), &ui.progressDisplayMode, progressModes, 4)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_width", "Progress bar width"), &ui.progressBarWidth, 60, 600)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_height", "Progress bar height"), &ui.progressBarHeight, 6, 60)) changed = true;
+            ImGui::Unindent();
         }
-        if (RenderIntSliderWithInput(GetLoc("menu.ui_position_y", "Combo UI vertical position (%)"), &ui.positionYPercent, 0, 100)) {
-            changed = true;
+
+        if (ImGui::CollapsingHeader(GetLoc("menu.ui_position_header", "Position and Base Size"))) {
+            ImGui::Indent();
+            if (RenderIntSliderWithInput(GetLoc("menu.ui_position_x", "Combo UI horizontal position (%)"), &ui.positionXPercent, 0, 100)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.ui_position_y", "Combo UI vertical position (%)"), &ui.positionYPercent, 0, 100)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.ui_scale", "Combo UI scale (%)"), &ui.scalePercent, 40, 300)) changed = true;
+            ImGui::Unindent();
         }
-        if (RenderIntSliderWithInput(GetLoc("menu.ui_scale", "Combo UI scale (%)"), &ui.scalePercent, 40, 300)) {
-            changed = true;
+
+        if (ImGui::CollapsingHeader(GetLoc("menu.ui_offsets_header", "Vertical Offsets"))) {
+            ImGui::Indent();
+            if (RenderIntSliderWithInput(GetLoc("menu.combo_label_y_offset", "Combo label vertical offset"), &ui.comboLabelYOffset, -300, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.combo_number_y_offset", "Combo number vertical offset"), &ui.comboNumberYOffset, -300, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.tier_y_offset", "Tier vertical offset"), &ui.tierYOffset, -300, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.tier_text_y_offset", "Tier text vertical offset"), &ui.tierTextYOffset, -300, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_y_offset", "Progress bar vertical offset"), &ui.progressBarYOffset, -300, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.combo_hits_y_offset", "Combo hits vertical offset"), &ui.comboHitsYOffset, -300, 300)) changed = true;
+            ImGui::Unindent();
         }
-        if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_width", "Progress bar width"), &ui.progressBarWidth, 60, 600)) {
-            changed = true;
-        }
-        if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_height", "Progress bar height"), &ui.progressBarHeight, 6, 60)) {
-            changed = true;
+
+        if (ImGui::CollapsingHeader(GetLoc("menu.ui_scales_header", "Element Scales"))) {
+            ImGui::Indent();
+            if (RenderIntSliderWithInput(GetLoc("menu.background_scale", "Background scale (%)"), &ui.backgroundScalePercent, 25, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.combo_label_scale", "Combo label scale (%)"), &ui.comboLabelScalePercent, 25, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.combo_number_scale", "Combo number scale (%)"), &ui.comboNumberScalePercent, 25, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.tier_scale", "Tier scale (%)"), &ui.tierScalePercent, 25, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.tier_text_scale", "Tier text scale (%)"), &ui.tierTextScalePercent, 25, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.progress_bar_scale", "Progress bar scale (%)"), &ui.progressBarScalePercent, 25, 300)) changed = true;
+            if (RenderIntSliderWithInput(GetLoc("menu.combo_hits_scale", "Combo hits scale (%)"), &ui.comboHitsScalePercent, 25, 300)) changed = true;
+            ImGui::Unindent();
         }
 
         if (ImGui::Button(GetLoc("menu.reset_ui_layout", "Reset UI layout"))) {
-            ui.positionXPercent = 83;
-            ui.positionYPercent = 76;
-            ui.scalePercent = 200;
-            ui.progressBarWidth = 220;
-            ui.progressBarHeight = 13;
+            ui.positionXPercent = 100;
+            ui.positionYPercent = 11;
+            ui.scalePercent = 159;
+            ui.progressBarWidth = 89;
+            ui.progressBarHeight = 8;
+            ui.comboLabelYOffset = -7;
+            ui.comboNumberYOffset = -7;
+            ui.tierYOffset = -10;
+            ui.tierTextYOffset = 33;
+            ui.progressBarYOffset = -42;
+            ui.comboHitsYOffset = -23;
+            ui.backgroundScalePercent = 106;
+            ui.comboLabelScalePercent = 64;
+            ui.comboNumberScalePercent = 74;
+            ui.tierScalePercent = 41;
+            ui.tierTextScalePercent = 71;
+            ui.progressBarScalePercent = 134;
+            ui.comboHitsScalePercent = 110;
             changed = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::CollapsingHeader(GetLoc("menu.notification_settings", "Notification Settings"))) {
+            ImGui::Indent();
+            ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.notification_display_header", "Display"));
+            if (ImGui::ColorEdit4(GetLoc("menu.notification_positive_color", "Positive notification color"), ui.notificationPositiveColor.data())) changed = true;
+            if (ImGui::ColorEdit4(GetLoc("menu.notification_negative_color", "Negative notification color"), ui.notificationNegativeColor.data())) changed = true;
+            if (ImGui::Checkbox(GetLoc("menu.show_notification_value", "Show notification value"), &ui.showNotificationValue)) changed = true;
+
+            ImGui::Separator();
+            ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.notification_combat_header", "Combat Texts"));
+            if (RenderStringInput(GetLoc("menu.notification_hit_text", "Hit notification text"), ui.notificationHitText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_hit_taken_text", "Hit taken notification text"), ui.notificationHitTakenText)) changed = true;
+
+            ImGui::Separator();
+            ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.notification_dodge_header", "Dodge Texts"));
+            if (RenderStringInput(GetLoc("menu.notification_dodge_text", "Dodge notification text"), ui.notificationDodgeText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_perfect_dodge_text", "Perfect dodge notification text"), ui.notificationPerfectDodgeText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_dodged_text", "Dodged notification text"), ui.notificationDodgedText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_perfect_dodged_text", "Perfect dodged notification text"), ui.notificationPerfectDodgedText)) changed = true;
+
+            ImGui::Separator();
+            ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.notification_parry_header", "Parry Texts"));
+            if (RenderStringInput(GetLoc("menu.notification_parry_text", "Parry notification text"), ui.notificationParryText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_perfect_parry_text", "Perfect parry notification text"), ui.notificationPerfectParryText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_parried_text", "Parried notification text"), ui.notificationParriedText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_perfect_parried_text", "Perfect parried notification text"), ui.notificationPerfectParriedText)) changed = true;
+
+            ImGui::Separator();
+            ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.notification_special_header", "Special Event Texts"));
+            if (RenderStringInput(GetLoc("menu.notification_undodgeable_text", "Undodgeable notification text"), ui.notificationUndodgeableText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_undodgeable_hit_text", "Undodgeable hit notification text"), ui.notificationUndodgeableHitText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_unblockable_text", "Unblockable notification text"), ui.notificationUnblockableText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_unblockable_hit_text", "Unblockable hit notification text"), ui.notificationUnblockableHitText)) changed = true;
+            if (RenderStringInput(GetLoc("menu.notification_stagger_text", "Stagger notification text"), ui.notificationStaggerText)) changed = true;
+            ImGui::Unindent();
         }
 
         ImGui::Separator();
@@ -590,7 +941,35 @@ namespace ModMenu {
                 ImGui::Indent();
                 ImGui::PushID(i);
 
+                ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_text_header", "Text"));
+                if (RenderStringInput(GetLoc("menu.tier_custom_text", "Tier text"), ui.tiers[i].tierText)) {
+                    changed = true;
+                }
+                if (RenderFontWeightCombo(GetLoc("menu.tier_text_font_weight", "Tier text font weight"), ui.tiers[i].textFontWeight)) {
+                    changed = true;
+                }
+                if (RenderFontWeightCombo(GetLoc("menu.combo_number_font_weight", "Combo number font weight"), ui.tiers[i].numberFontWeight)) {
+                    changed = true;
+                }
+                if (ImGui::Checkbox(GetLoc("menu.tier_text_all_caps", "Tier text all caps"), &ui.tiers[i].textAllCaps)) {
+                    changed = true;
+                }
+                if (ImGui::Checkbox(GetLoc("menu.combo_number_all_caps", "Combo number all caps"), &ui.tiers[i].numberAllCaps)) {
+                    changed = true;
+                }
+
+                ImGui::Separator();
+                ImGui::TextColored({ 0.6f, 0.8f, 1.0f, 1.0f }, "%s", GetLoc("menu.tier_colors_header", "Colors"));
                 if (ImGui::ColorEdit4(GetLoc("menu.tier_letter_color", "Tier letter color"), ui.tiers[i].letterColor.data())) {
+                    changed = true;
+                }
+                if (ImGui::ColorEdit4(GetLoc("menu.tier_empty_color", "Tier empty color"), ui.tiers[i].tierEmptyColor.data())) {
+                    changed = true;
+                }
+                if (ImGui::ColorEdit4(GetLoc("menu.tier_text_color", "Tier text color"), ui.tiers[i].textColor.data())) {
+                    changed = true;
+                }
+                if (ImGui::ColorEdit4(GetLoc("menu.combo_number_color", "Combo number color"), ui.tiers[i].numberColor.data())) {
                     changed = true;
                 }
                 if (ImGui::ColorEdit4(GetLoc("menu.tier_background_color", "Tier background color"), ui.tiers[i].backgroundColor.data())) {
@@ -684,12 +1063,10 @@ namespace ModMenu {
         }
     }
 
-    void LoadSettings() {
-        std::ifstream file(SETTINGS_PATH, std::ios::binary);
+    static bool LoadDocumentFromFile(const char* path, rapidjson::Document& doc) {
+        std::ifstream file(path, std::ios::binary);
         if (!file.is_open()) {
-            SaveSettings();
-            LoadRules();
-            return;
+            return false;
         }
 
         std::stringstream buffer;
@@ -703,57 +1080,105 @@ namespace ModMenu {
             jsonStr.erase(0, 3);
         }
 
-        rapidjson::Document doc;
         doc.Parse(jsonStr.c_str());
         if (doc.HasParseError() || !doc.IsObject()) {
-            logger::warn("Combo Count settings could not be parsed. Using defaults.");
-            LoadRules();
-            return;
+            logger::warn("Combo System settings file could not be parsed: {}", path);
+            return false;
         }
 
-        if (doc.HasMember("player")) {
-            ReadProfileSettingsFromSavedValue(doc["player"], Settings::PlayerCombo);
-        }
-        if (doc.HasMember("npc")) {
-            ReadProfileSettingsFromSavedValue(doc["npc"], Settings::NPCCombo);
-        }
-        if (doc.HasMember("playerUI")) {
-            ReadPlayerUISettings(doc["playerUI"], Settings::PlayerUI);
-        }
-        if (doc.HasMember("showFloatingMessages") && doc["showFloatingMessages"].IsBool()) {
-            Settings::PlayerUI.showFloatingMessages = doc["showFloatingMessages"].GetBool();
-        }
-
-        LoadRules();
+        return true;
     }
 
-    void SaveSettings() {
-        std::filesystem::create_directories("Data/SKSE/Plugins/ComboCount");
-
-        rapidjson::Document doc;
-        doc.SetObject();
-        auto& alloc = doc.GetAllocator();
-
-        rapidjson::Value player(rapidjson::kObjectType);
-        WriteProfileSettings(player, alloc, Settings::PlayerCombo);
-        doc.AddMember("player", player, alloc);
-
-        rapidjson::Value npc(rapidjson::kObjectType);
-        WriteProfileSettings(npc, alloc, Settings::NPCCombo);
-        doc.AddMember("npc", npc, alloc);
-
-        rapidjson::Value playerUI(rapidjson::kObjectType);
-        WritePlayerUISettings(playerUI, alloc, Settings::PlayerUI);
-        doc.AddMember("playerUI", playerUI, alloc);
-
+    static void WriteDocumentToFile(const char* path, const rapidjson::Document& doc) {
         rapidjson::StringBuffer buffer;
         rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
         doc.Accept(writer);
 
-        std::ofstream file(SETTINGS_PATH, std::ios::binary);
+        std::ofstream file(path, std::ios::binary);
         if (file.is_open()) {
             file << buffer.GetString();
         }
+    }
+
+    void LoadSettings() {
+        bool loadedAnySplitFile = false;
+        bool shouldSaveSplitFiles = false;
+
+        rapidjson::Document playerDoc;
+        if (LoadDocumentFromFile(PLAYER_SETTINGS_PATH, playerDoc)) {
+            ReadProfileSettingsFromSavedValue(playerDoc, Settings::PlayerCombo);
+            loadedAnySplitFile = true;
+        }
+
+        rapidjson::Document npcDoc;
+        if (LoadDocumentFromFile(NPC_SETTINGS_PATH, npcDoc)) {
+            ReadProfileSettingsFromSavedValue(npcDoc, Settings::NPCCombo);
+            loadedAnySplitFile = true;
+        }
+
+        rapidjson::Document uiDoc;
+        if (LoadDocumentFromFile(UI_SETTINGS_PATH, uiDoc)) {
+            ReadPlayerUISettings(uiDoc, Settings::PlayerUI);
+            loadedAnySplitFile = true;
+        }
+
+        rapidjson::Document legacyDoc;
+        if (LoadDocumentFromFile(SETTINGS_PATH, legacyDoc)) {
+            if (!std::filesystem::exists(PLAYER_SETTINGS_PATH) && legacyDoc.HasMember("player")) {
+                ReadProfileSettingsFromSavedValue(legacyDoc["player"], Settings::PlayerCombo);
+                shouldSaveSplitFiles = true;
+            }
+            if (!std::filesystem::exists(NPC_SETTINGS_PATH) && legacyDoc.HasMember("npc")) {
+                ReadProfileSettingsFromSavedValue(legacyDoc["npc"], Settings::NPCCombo);
+                shouldSaveSplitFiles = true;
+            }
+            if (!std::filesystem::exists(UI_SETTINGS_PATH) && legacyDoc.HasMember("playerUI")) {
+                ReadPlayerUISettings(legacyDoc["playerUI"], Settings::PlayerUI);
+                shouldSaveSplitFiles = true;
+            }
+            if (!std::filesystem::exists(UI_SETTINGS_PATH) && legacyDoc.HasMember("showFloatingMessages") && legacyDoc["showFloatingMessages"].IsBool()) {
+                Settings::PlayerUI.showFloatingMessages = legacyDoc["showFloatingMessages"].GetBool();
+                shouldSaveSplitFiles = true;
+            }
+            loadedAnySplitFile = true;
+        }
+
+        if (!loadedAnySplitFile) {
+            shouldSaveSplitFiles = true;
+        }
+
+        LoadRules();
+        if (shouldSaveSplitFiles) {
+            SaveSettings();
+        }
+    }
+
+    void SaveSettings() {
+        std::filesystem::create_directories("Data/SKSE/Plugins/ComboSystem");
+
+        rapidjson::Document playerDoc;
+        playerDoc.SetObject();
+        auto& playerAlloc = playerDoc.GetAllocator();
+        rapidjson::Value player(rapidjson::kObjectType);
+        WriteProfileSettings(player, playerAlloc, Settings::PlayerCombo);
+        playerDoc.CopyFrom(player, playerAlloc);
+        WriteDocumentToFile(PLAYER_SETTINGS_PATH, playerDoc);
+
+        rapidjson::Document npcDoc;
+        npcDoc.SetObject();
+        auto& npcAlloc = npcDoc.GetAllocator();
+        rapidjson::Value npc(rapidjson::kObjectType);
+        WriteProfileSettings(npc, npcAlloc, Settings::NPCCombo);
+        npcDoc.CopyFrom(npc, npcAlloc);
+        WriteDocumentToFile(NPC_SETTINGS_PATH, npcDoc);
+
+        rapidjson::Document uiDoc;
+        uiDoc.SetObject();
+        auto& uiAlloc = uiDoc.GetAllocator();
+        rapidjson::Value playerUI(rapidjson::kObjectType);
+        WritePlayerUISettings(playerUI, uiAlloc, Settings::PlayerUI);
+        uiDoc.CopyFrom(playerUI, uiAlloc);
+        WriteDocumentToFile(UI_SETTINGS_PATH, uiDoc);
 
         for (const auto& rule : Settings::ComboRules) {
             SaveRule(rule);
@@ -868,7 +1293,7 @@ namespace ModMenu {
 
         LoadLanguage();
         LoadSettings();
-        SKSEMenuFramework::SetSection("Combo Count");
+        SKSEMenuFramework::SetSection("Combo System");
         SKSEMenuFramework::AddSectionItem(GetLoc("menu.player_settings", "Player Settings"), PlayerRender);
         SKSEMenuFramework::AddSectionItem(GetLoc("menu.ui_settings", "UI Settings"), UIRender);
         SKSEMenuFramework::AddSectionItem(GetLoc("menu.npc_settings", "NPC Settings"), NPCRender);

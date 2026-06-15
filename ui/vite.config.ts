@@ -11,7 +11,13 @@ export default defineConfig({
                 // Remove os hashes [hash] dos nomes dos arquivos
                 entryFileNames: `[name].js`,
                 chunkFileNames: `[name].js`,
-                assetFileNames: `[name].[ext]`
+                assetFileNames: (assetInfo) => {
+                    const name = assetInfo.names?.[0] ?? assetInfo.name ?? '';
+                    if (/\.(ttf|otf|woff2?|eot)$/i.test(name)) {
+                        return `fonts/[name][extname]`;
+                    }
+                    return `[name][extname]`;
+                }
             }
         }
     }

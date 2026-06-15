@@ -1,8 +1,9 @@
-#include "Events.h"
+﻿#include "Events.h"
 #include "Configuration.h"
 #include "DelayedDispatcher.h"
 #include "Prisma.h"
 #include <algorithm>
+#include <array>
 #include <vector>
 
 namespace Sink {
@@ -35,6 +36,24 @@ namespace Sink {
         const Settings::TierSettings& GetTierSettings(const Settings::ComboProfileSettings& profile, int tier) {
             const int clampedTier = std::clamp(tier, 0, Settings::kComboTierCount - 1);
             return profile.tiers[clampedTier];
+        }
+
+        const char* GetTierGotEventName(int tier) {
+            static constexpr std::array<const char*, Settings::kComboTierCount> events{
+                "TierGotFCMF",
+                "TierGotECMF",
+                "TierGotDCMF",
+                "TierGotCCMF",
+                "TierGotBCMF",
+                "TierGotACMF",
+                "TierGotSCMF",
+                "TierGotSSCMF",
+                "TierGotSSSCMF",
+                "TierGotZCMF"
+            };
+
+            const int clampedTier = std::clamp(tier, 0, Settings::kComboTierCount - 1);
+            return events[clampedTier];
         }
 
         bool CanAdvanceTier(const ActorComboData& data, const Settings::TierSettings& settings) {
@@ -161,6 +180,7 @@ namespace Sink {
 
         int pointsGained = 0;
         ActorComboData dataCopy;
+        int previousTierForNotify = -1;
         auto nowTime = std::chrono::steady_clock::now();
         const auto& profile = GetProfileForActor(attackerFormID);
         const int sourceType = GetSourceType(sourceFormID);
@@ -195,11 +215,13 @@ namespace Sink {
             data.decayAccumulator = 0.0f;
             data.decayUpdateAccumulator = 0.0f;
 
+            const int previousTier = data.comboValue;
             ApplyTierProgression(data, profile);
             dataCopy = data;
+            previousTierForNotify = previousTier;
         }
 
-        UpdateGraphVariables(attackerFormID, dataCopy);
+        UpdateGraphVariables(attackerFormID, dataCopy, previousTierForNotify);
         ShowPlayerComboMessage(attackerFormID, "Hit", pointsGained);
 
         if (expireSeconds > 0) {
@@ -227,6 +249,7 @@ namespace Sink {
                         actorPtr->SetGraphVariableInt("HitValueCMF", 0);
                         actorPtr->SetGraphVariableInt("ComboValueCMF", 0);
                         actorPtr->SetGraphVariableInt("ComboPointsCMF", 0);
+                        actorPtr->SetGraphVariableInt("TierComboPointsCMF", 0);
 
                         if (actorPtr->IsPlayerRef() || attackerFormID == 0x14) {
                             Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
@@ -244,6 +267,7 @@ namespace Sink {
         bool found = false;
         ActorComboData dataCopy;
         int pointsLost = 0;
+        int previousTierForNotify = -1;
 
         {
             std::unique_lock lock(_mutex);
@@ -254,6 +278,7 @@ namespace Sink {
                 const auto& tierSettings = GetTierSettings(profile, data.comboValue);
                 pointsLost = tierSettings.getHitPenalty;
                 data.comboPoints -= pointsLost;
+                previousTierForNotify = data.comboValue;
                 ApplyTierProgression(data, profile);
 
                 dataCopy = data;
@@ -262,7 +287,7 @@ namespace Sink {
         }
 
         if (found) {
-            UpdateGraphVariables(targetFormID, dataCopy);
+            UpdateGraphVariables(targetFormID, dataCopy, previousTierForNotify);
             ShowPlayerComboMessage(targetFormID, "Hit Taken", -pointsLost);
         }
     }
@@ -273,6 +298,7 @@ namespace Sink {
 
         ActorComboData dataCopy;
         bool changed = false;
+        int previousTierForNotify = -1;
         auto nowTime = std::chrono::steady_clock::now();
         const auto& profile = GetProfileForActor(actorFormID);
         const int expireSeconds = profile.expireComboSeconds;
@@ -283,13 +309,14 @@ namespace Sink {
             data.comboPoints += pointsDelta;
             data.lastHitTime = nowTime;
             data.decayAccumulator = 0.0f;
+            previousTierForNotify = data.comboValue;
             ApplyTierProgression(data, profile);
             dataCopy = data;
             changed = true;
         }
 
         if (changed) {
-            UpdateGraphVariables(actorFormID, dataCopy);
+            UpdateGraphVariables(actorFormID, dataCopy, previousTierForNotify);
         }
 
         if (expireSeconds > 0) {
@@ -351,6 +378,7 @@ namespace Sink {
             actor->SetGraphVariableInt("HitValueCMF", 0);
             actor->SetGraphVariableInt("ComboValueCMF", 0);
             actor->SetGraphVariableInt("ComboPointsCMF", 0);
+            actor->SetGraphVariableInt("TierComboPointsCMF", 0);
 
             if (actor->IsPlayerRef() || actorFormID == 0x14) {
                 Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
@@ -368,6 +396,7 @@ namespace Sink {
             player->SetGraphVariableInt("HitValueCMF", 0);
             player->SetGraphVariableInt("ComboValueCMF", 0);
             player->SetGraphVariableInt("ComboPointsCMF", 0);
+            player->SetGraphVariableInt("TierComboPointsCMF", 0);
         }
 
         if (auto processLists = RE::ProcessLists::GetSingleton()) {
@@ -376,6 +405,7 @@ namespace Sink {
                     actor->SetGraphVariableInt("HitValueCMF", 0);
                     actor->SetGraphVariableInt("ComboValueCMF", 0);
                     actor->SetGraphVariableInt("ComboPointsCMF", 0);
+                    actor->SetGraphVariableInt("TierComboPointsCMF", 0);
                 }
             }
         }
@@ -387,7 +417,12 @@ namespace Sink {
     void ComboManager::UpdateDecay(float deltaTime) {
         if (deltaTime <= 0.0f) return;
 
-        std::vector<std::pair<RE::FormID, ActorComboData>> changedActors;
+        struct ChangedActor {
+            RE::FormID actorFormID;
+            ActorComboData data;
+            int previousTier;
+        };
+        std::vector<ChangedActor> changedActors;
 
         {
             std::unique_lock lock(_mutex);
@@ -412,17 +447,18 @@ namespace Sink {
 
                 data.decayAccumulator -= static_cast<float>(pointsToLose);
                 data.comboPoints -= pointsToLose;
+                const int previousTier = data.comboValue;
                 ApplyTierProgression(data, profile);
-                changedActors.emplace_back(actorFormID, data);
+                changedActors.push_back({ actorFormID, data, previousTier });
             }
         }
 
-        for (const auto& [actorFormID, data] : changedActors) {
-            UpdateGraphVariables(actorFormID, data);
+        for (const auto& changedActor : changedActors) {
+            UpdateGraphVariables(changedActor.actorFormID, changedActor.data, changedActor.previousTier);
         }
     }
 
-    void ComboManager::UpdateGraphVariables(RE::FormID actorFormID, const ActorComboData& data) {
+    void ComboManager::UpdateGraphVariables(RE::FormID actorFormID, const ActorComboData& data, int previousTier) {
         if (!actorFormID) return;
 
         const int hitVal = data.hitValue;
@@ -430,19 +466,32 @@ namespace Sink {
         const int comboPoints = data.comboPoints;
         const auto& profile = GetProfileForActor(actorFormID);
         const int pointsPerTier = std::max(1, GetTierSettings(profile, comboVal).pointsPerTier);
+        int totalComboPoints = comboPoints;
+        for (int tier = 0; tier < comboVal; tier++) {
+            totalComboPoints += std::max(1, GetTierSettings(profile, tier).pointsPerTier);
+        }
+        const int clampedPreviousTier = previousTier >= 0 ? std::clamp(previousTier, 0, Settings::kComboTierCount - 1) : comboVal;
+        const bool tierChanged = previousTier >= 0 && clampedPreviousTier != comboVal;
+        const bool tierAdvanced = tierChanged && comboVal > clampedPreviousTier;
 
-        SKSE::GetTaskInterface()->AddTask([actorFormID, hitVal, comboVal, comboPoints, pointsPerTier]() {
+
             auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
             if (!actorPtr || actorPtr->IsDead() || !actorPtr->Is3DLoaded()) return;
 
             actorPtr->SetGraphVariableInt("HitValueCMF", hitVal);
             actorPtr->SetGraphVariableInt("ComboValueCMF", comboVal);
-            actorPtr->SetGraphVariableInt("ComboPointsCMF", comboPoints);
+            actorPtr->SetGraphVariableInt("ComboPointsCMF", totalComboPoints);
+            actorPtr->SetGraphVariableInt("TierComboPointsCMF", comboPoints);
+
+            if (tierChanged) {
+                actorPtr->NotifyAnimationGraph(tierAdvanced ? "TierAdvanceCMF" : "TierReduceCMF");
+                actorPtr->NotifyAnimationGraph(GetTierGotEventName(comboVal));
+            }
 
             if (actorPtr->IsPlayerRef() || actorFormID == 0x14) {
-                Prisma::UpdateCombo(hitVal, comboVal, comboPoints, pointsPerTier);
+                Prisma::UpdateCombo(hitVal, comboVal, comboPoints, pointsPerTier, totalComboPoints);
             }
-        });
+
     }
 
     RE::BSEventNotifyControl HitEventHandler::ProcessEvent(

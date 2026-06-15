@@ -57,7 +57,7 @@ namespace Sink {
 
 
         // Atualiza as variáveis diretamente no Graph do Skyrim
-        void UpdateGraphVariables(RE::FormID actorFormID, const ActorComboData& data);
+        void UpdateGraphVariables(RE::FormID actorFormID, const ActorComboData& data, int previousTier = -1);
     };
 
     class HitEventHandler : public RE::BSTEventSink<RE::TESHitEvent> {

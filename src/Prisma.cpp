@@ -20,10 +20,14 @@ namespace {
         writer.Bool(Settings::PlayerUI.showFloatingMessages);
         writer.Key("showComboHits");
         writer.Bool(Settings::PlayerUI.showComboHits);
+        writer.Key("showComboNumber");
+        writer.Bool(Settings::PlayerUI.showComboNumber);
+        writer.Key("showTotalComboPoints");
+        writer.Bool(Settings::PlayerUI.showTotalComboPoints);
         writer.Key("editMode");
         writer.Bool(Settings::PlayerUI.editMode);
-        writer.Key("useTextProgressFill");
-        writer.Bool(Settings::PlayerUI.useTextProgressFill);
+        writer.Key("progressDisplayMode");
+        writer.Int(Settings::PlayerUI.progressDisplayMode);
         writer.Key("showTierName");
         writer.Bool(Settings::PlayerUI.showTierName);
         writer.Key("positionXPercent");
@@ -36,16 +40,114 @@ namespace {
         writer.Int(Settings::PlayerUI.progressBarWidth);
         writer.Key("progressBarHeight");
         writer.Int(Settings::PlayerUI.progressBarHeight);
+        writer.Key("comboLabelYOffset");
+        writer.Int(Settings::PlayerUI.comboLabelYOffset);
+        writer.Key("comboNumberYOffset");
+        writer.Int(Settings::PlayerUI.comboNumberYOffset);
+        writer.Key("tierYOffset");
+        writer.Int(Settings::PlayerUI.tierYOffset);
+        writer.Key("tierTextYOffset");
+        writer.Int(Settings::PlayerUI.tierTextYOffset);
+        writer.Key("progressBarYOffset");
+        writer.Int(Settings::PlayerUI.progressBarYOffset);
+        writer.Key("comboHitsYOffset");
+        writer.Int(Settings::PlayerUI.comboHitsYOffset);
+        writer.Key("backgroundScalePercent");
+        writer.Int(Settings::PlayerUI.backgroundScalePercent);
+        writer.Key("comboLabelScalePercent");
+        writer.Int(Settings::PlayerUI.comboLabelScalePercent);
+        writer.Key("comboNumberScalePercent");
+        writer.Int(Settings::PlayerUI.comboNumberScalePercent);
+        writer.Key("tierScalePercent");
+        writer.Int(Settings::PlayerUI.tierScalePercent);
+        writer.Key("tierTextScalePercent");
+        writer.Int(Settings::PlayerUI.tierTextScalePercent);
+        writer.Key("progressBarScalePercent");
+        writer.Int(Settings::PlayerUI.progressBarScalePercent);
+        writer.Key("comboHitsScalePercent");
+        writer.Int(Settings::PlayerUI.comboHitsScalePercent);
+        writer.Key("notificationPositiveColor");
+        writer.StartArray();
+        writer.Double(Settings::PlayerUI.notificationPositiveColor[0]);
+        writer.Double(Settings::PlayerUI.notificationPositiveColor[1]);
+        writer.Double(Settings::PlayerUI.notificationPositiveColor[2]);
+        writer.Double(Settings::PlayerUI.notificationPositiveColor[3]);
+        writer.EndArray();
+        writer.Key("notificationNegativeColor");
+        writer.StartArray();
+        writer.Double(Settings::PlayerUI.notificationNegativeColor[0]);
+        writer.Double(Settings::PlayerUI.notificationNegativeColor[1]);
+        writer.Double(Settings::PlayerUI.notificationNegativeColor[2]);
+        writer.Double(Settings::PlayerUI.notificationNegativeColor[3]);
+        writer.EndArray();
+        writer.Key("showNotificationValue");
+        writer.Bool(Settings::PlayerUI.showNotificationValue);
+        writer.Key("notificationTexts");
+        writer.StartObject();
+        writer.Key("Hit");
+        writer.String(Settings::PlayerUI.notificationHitText.c_str());
+        writer.Key("Hit Taken");
+        writer.String(Settings::PlayerUI.notificationHitTakenText.c_str());
+        writer.Key("Dodge");
+        writer.String(Settings::PlayerUI.notificationDodgeText.c_str());
+        writer.Key("Perfect Dodge");
+        writer.String(Settings::PlayerUI.notificationPerfectDodgeText.c_str());
+        writer.Key("Dodged");
+        writer.String(Settings::PlayerUI.notificationDodgedText.c_str());
+        writer.Key("Perfect Dodged");
+        writer.String(Settings::PlayerUI.notificationPerfectDodgedText.c_str());
+        writer.Key("Parry");
+        writer.String(Settings::PlayerUI.notificationParryText.c_str());
+        writer.Key("Perfect Parry");
+        writer.String(Settings::PlayerUI.notificationPerfectParryText.c_str());
+        writer.Key("Parried");
+        writer.String(Settings::PlayerUI.notificationParriedText.c_str());
+        writer.Key("Perfect Parried");
+        writer.String(Settings::PlayerUI.notificationPerfectParriedText.c_str());
+        writer.Key("Undodgeable");
+        writer.String(Settings::PlayerUI.notificationUndodgeableText.c_str());
+        writer.Key("Undodgeable Hit");
+        writer.String(Settings::PlayerUI.notificationUndodgeableHitText.c_str());
+        writer.Key("Unblockable");
+        writer.String(Settings::PlayerUI.notificationUnblockableText.c_str());
+        writer.Key("Unblockable Hit");
+        writer.String(Settings::PlayerUI.notificationUnblockableHitText.c_str());
+        writer.Key("Stagger");
+        writer.String(Settings::PlayerUI.notificationStaggerText.c_str());
+        writer.EndObject();
         writer.Key("tiers");
         writer.StartArray();
         for (int i = 0; i < Settings::kComboTierCount; i++) {
             writer.StartObject();
+            writer.Key("tierText");
+            writer.String(Settings::PlayerUI.tiers[i].tierText.c_str());
             writer.Key("letterColor");
             writer.StartArray();
             writer.Double(Settings::PlayerUI.tiers[i].letterColor[0]);
             writer.Double(Settings::PlayerUI.tiers[i].letterColor[1]);
             writer.Double(Settings::PlayerUI.tiers[i].letterColor[2]);
             writer.Double(Settings::PlayerUI.tiers[i].letterColor[3]);
+            writer.EndArray();
+            writer.Key("tierEmptyColor");
+            writer.StartArray();
+            writer.Double(Settings::PlayerUI.tiers[i].tierEmptyColor[0]);
+            writer.Double(Settings::PlayerUI.tiers[i].tierEmptyColor[1]);
+            writer.Double(Settings::PlayerUI.tiers[i].tierEmptyColor[2]);
+            writer.Double(Settings::PlayerUI.tiers[i].tierEmptyColor[3]);
+            writer.EndArray();
+            writer.Key("textColor");
+            writer.StartArray();
+            writer.Double(Settings::PlayerUI.tiers[i].textColor[0]);
+            writer.Double(Settings::PlayerUI.tiers[i].textColor[1]);
+            writer.Double(Settings::PlayerUI.tiers[i].textColor[2]);
+            writer.Double(Settings::PlayerUI.tiers[i].textColor[3]);
+            writer.EndArray();
+            writer.Key("numberColor");
+            writer.StartArray();
+            writer.Double(Settings::PlayerUI.tiers[i].numberColor[0]);
+            writer.Double(Settings::PlayerUI.tiers[i].numberColor[1]);
+            writer.Double(Settings::PlayerUI.tiers[i].numberColor[2]);
+            writer.Double(Settings::PlayerUI.tiers[i].numberColor[3]);
             writer.EndArray();
             writer.Key("backgroundColor");
             writer.StartArray();
@@ -54,6 +156,14 @@ namespace {
             writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[2]);
             writer.Double(Settings::PlayerUI.tiers[i].backgroundColor[3]);
             writer.EndArray();
+            writer.Key("textFontWeight");
+            writer.Int(Settings::PlayerUI.tiers[i].textFontWeight);
+            writer.Key("numberFontWeight");
+            writer.Int(Settings::PlayerUI.tiers[i].numberFontWeight);
+            writer.Key("textAllCaps");
+            writer.Bool(Settings::PlayerUI.tiers[i].textAllCaps);
+            writer.Key("numberAllCaps");
+            writer.Bool(Settings::PlayerUI.tiers[i].numberAllCaps);
             writer.EndObject();
         }
         writer.EndArray();
@@ -142,7 +252,7 @@ void Prisma::Hide() {
 
 bool Prisma::IsHidden() { return !PrismaUI || !view || PrismaUI->IsHidden(view); }
 
-void Prisma::UpdateCombo(int hitValue, int comboValue, int comboPoints, int pointsPerTier) {
+void Prisma::UpdateCombo(int hitValue, int comboValue, int tierComboPoints, int pointsPerTier, int totalComboPoints) {
     if (!PrismaUI || !view) return;
     if (!Settings::PlayerUI.enabled) {
         if (!PrismaUI->IsHidden(view)) {
@@ -156,7 +266,7 @@ void Prisma::UpdateCombo(int hitValue, int comboValue, int comboPoints, int poin
     }
 
     static std::string payload;
-    payload = std::to_string(hitValue) + "|" + std::to_string(comboValue) + "|" + std::to_string(comboPoints) + "|" + std::to_string(pointsPerTier);
+    payload = std::to_string(hitValue) + "|" + std::to_string(comboValue) + "|" + std::to_string(tierComboPoints) + "|" + std::to_string(pointsPerTier) + "|" + std::to_string(totalComboPoints);
     try {
         PrismaUI->InteropCall(view, "updateComboMeter", payload.c_str());
     }
