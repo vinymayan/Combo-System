@@ -153,6 +153,18 @@ namespace Sink {
                 });
             }
         }
+
+        bool IsFriendlyHit(RE::Actor* attacker, RE::Actor* target) {
+            if (!attacker || !target) {
+                return false;
+            }
+
+            if (attacker == target) {
+                return true;
+            }
+
+            return !target->IsHostileToActor(attacker) && !attacker->IsHostileToActor(target);
+        }
     }
 
     HitType ComboManager::DetermineHitType(const RE::TESHitEvent* a_event) {
@@ -513,11 +525,23 @@ namespace Sink {
 
         const auto targetFormID = target->GetFormID();
         RE::FormID attackerFormID = 0;
+        RE::Actor* attackerActor = nullptr;
         if (auto causeRef = a_event->cause.get()) {
             if (auto* attacker = causeRef->As<RE::Actor>()) {
+                attackerActor = attacker;
                 attackerFormID = attacker->GetFormID();
                 SKSE::log::debug("Hit fired by actor: FormID [0x{:08X}], Name: '{}'", attackerFormID, attacker->GetName());
             }
+        }
+
+        if (IsFriendlyHit(attackerActor, target)) {
+            SKSE::log::debug(
+                "Ignoring friendly combo hit: attacker [0x{:08X}] '{}' -> target [0x{:08X}] '{}'",
+                attackerFormID,
+                attackerActor ? attackerActor->GetName() : "",
+                targetFormID,
+                target->GetName());
+            return RE::BSEventNotifyControl::kContinue;
         }
 
         const auto hitType = ComboManager::GetSingleton()->DetermineHitType(a_event);

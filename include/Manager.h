@@ -51,6 +51,7 @@ public:
     bool IsNPCAffected(RE::FormID baseID);
 
     void PopulateAllLists();
+    void RefreshLists(std::string_view a_signatures);
     static std::string ToUTF8(std::string_view a_str);
     // Data Store: Map of "TypeName" -> List of InternalFormInfo
     // We use this to feed the UI
@@ -58,6 +59,7 @@ public:
 
     // Register callback for when population is done
     void RegisterReadyCallback(std::function<void()> callback);
+    bool _isPopulated = false;
 
 private:
     Manager() = default;
@@ -65,7 +67,6 @@ private:
     template <typename T>
     void PopulateList(const std::string& a_typeName, std::function<bool(T*)> a_filter = nullptr);
 
-    bool _isPopulated = false;
     std::map<std::string, std::vector<InternalFormInfo>> _dataStore;
     std::vector<std::function<void()>> _readyCallbacks;
     std::map<RE::FormID, std::string> _affectedNPCs;
