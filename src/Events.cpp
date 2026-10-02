@@ -77,8 +77,8 @@ namespace Sink {
                 const auto& settings = GetTierSettings(profile, data.comboValue);
                 const int pointsPerTier = std::max(1, settings.pointsPerTier);
                 if (!CanAdvanceTier(data, settings)) {
-                    data.comboPoints = std::min(data.comboPoints, pointsPerTier - 1);
-                    return;
+                    data.comboPoints = std::min(data.comboPoints, std::max(1, pointsPerTier - 1));
+                    break;
                 }
                 if (data.comboPoints < pointsPerTier) {
                     break;
@@ -91,6 +91,12 @@ namespace Sink {
                 const auto& settings = GetTierSettings(profile, data.comboValue);
                 data.comboValue = kMaxComboTier;
                 data.comboPoints = std::min(data.comboPoints, std::max(1, settings.pointsPerTier));
+            }
+
+            if (data.comboValue == 0 && data.comboPoints == 0) {
+                const auto lastHitTime = data.lastHitTime;
+                data = {};
+                data.lastHitTime = lastHitTime;
             }
         }
 
@@ -163,7 +169,16 @@ namespace Sink {
                 return true;
             }
 
-            return !target->IsHostileToActor(attacker) && !attacker->IsHostileToActor(target);
+            if (target->IsHostileToActor(attacker) || attacker->IsHostileToActor(target)) {
+                return false;
+            }
+
+            const auto targetReaction = target->GetFactionReaction(attacker);
+            const auto attackerReaction = attacker->GetFactionReaction(target);
+            return targetReaction == RE::FIGHT_REACTION::kAlly || targetReaction == RE::FIGHT_REACTION::kFriend ||
+                attackerReaction == RE::FIGHT_REACTION::kAlly || attackerReaction == RE::FIGHT_REACTION::kFriend ||
+                ((attacker->IsPlayerRef() || attacker->IsPlayerTeammate()) &&
+                    (target->IsPlayerRef() || target->IsPlayerTeammate()));
         }
     }
 
@@ -239,33 +254,11 @@ namespace Sink {
         if (expireSeconds > 0) {
             Utils::DelayedDispatcher::Get().PostDelayed(std::chrono::seconds(expireSeconds), [this, attackerFormID, nowTime]() {
                 SKSE::GetTaskInterface()->AddTask([this, attackerFormID, nowTime]() {
-                    auto actorPtr = RE::TESForm::LookupByID<RE::Actor>(attackerFormID);
-                    if (!actorPtr || actorPtr->IsDead() || !actorPtr->Is3DLoaded()) {
-                        if (attackerFormID == 0x14) {
-                            Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
-                        }
-                        return;
-                    }
-
-                    bool shouldReset = false;
-                    {
-                        std::unique_lock lock(_mutex);
-                        auto it = _registry.find(attackerFormID);
-                        if (it != _registry.end() && it->second.lastHitTime == nowTime) {
-                            _registry.erase(it);
-                            shouldReset = true;
-                        }
-                    }
-
-                    if (shouldReset) {
-                        actorPtr->SetGraphVariableInt("HitValueCMF", 0);
-                        actorPtr->SetGraphVariableInt("ComboValueCMF", 0);
-                        actorPtr->SetGraphVariableInt("ComboPointsCMF", 0);
-                        actorPtr->SetGraphVariableInt("TierComboPointsCMF", 0);
-
-                        if (actorPtr->IsPlayerRef() || attackerFormID == 0x14) {
-                            Prisma::UpdateCombo(0, 0, 0, GetTierSettings(Settings::PlayerCombo, 0).pointsPerTier);
-                        }
+                    std::unique_lock lock(_mutex);
+                    auto it = _registry.find(attackerFormID);
+                    if (it != _registry.end() && it->second.lastHitTime == nowTime) {
+                        lock.unlock();
+                        RemoveActor(attackerFormID);
                     }
                 });
             });
@@ -284,7 +277,7 @@ namespace Sink {
         {
             std::unique_lock lock(_mutex);
             auto it = _registry.find(targetFormID);
-            if (it != _registry.end()) {
+            if (it != _registry.end() && (it->second.comboValue > 0 || it->second.comboPoints > 0)) {
                 auto& data = it->second;
                 const auto& profile = GetProfileForActor(targetFormID);
                 const auto& tierSettings = GetTierSettings(profile, data.comboValue);
@@ -317,10 +310,12 @@ namespace Sink {
 
         {
             std::unique_lock lock(_mutex);
+            if (pointsDelta < 0 && !_registry.contains(actorFormID)) return;
             auto& data = _registry[actorFormID];
             data.comboPoints += pointsDelta;
             data.lastHitTime = nowTime;
             data.decayAccumulator = 0.0f;
+            data.decayUpdateAccumulator = 0.0f;
             previousTierForNotify = data.comboValue;
             ApplyTierProgression(data, profile);
             dataCopy = data;
@@ -501,7 +496,9 @@ namespace Sink {
             }
 
             if (actorPtr->IsPlayerRef() || actorFormID == 0x14) {
-                Prisma::UpdateCombo(hitVal, comboVal, comboPoints, pointsPerTier, totalComboPoints);
+                SKSE::GetTaskInterface()->AddTask([hitVal, comboVal, comboPoints, pointsPerTier, totalComboPoints]() {
+                    Prisma::UpdateCombo(hitVal, comboVal, comboPoints, pointsPerTier, totalComboPoints);
+                });
             }
 
     }
@@ -519,7 +516,7 @@ namespace Sink {
         }
 
         auto* target = targetRef->As<RE::Actor>();
-        if (!target) {
+        if (!target || target->IsDead()) {
             return RE::BSEventNotifyControl::kContinue;
         }
 

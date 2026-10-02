@@ -72,7 +72,8 @@ namespace Settings {
         bool showComboHits = true;
         bool showComboNumber = true;
         bool showTotalComboPoints = false;
-        bool editMode = true;
+        bool editMode = false;
+        int editPreviewTier = 8;
         int progressDisplayMode = 3;
         bool showTierName = false;
         int positionXPercent = 100;

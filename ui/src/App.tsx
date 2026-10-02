@@ -20,6 +20,7 @@ type UiConfig = {
     showComboNumber: boolean;
     showTotalComboPoints: boolean;
     editMode: boolean;
+    editPreviewTier: number;
     progressDisplayMode: number;
     showTierName: boolean;
     positionXPercent: number;
@@ -109,7 +110,8 @@ const defaultConfig = (): UiConfig => ({
     showComboHits: true,
     showComboNumber: true,
     showTotalComboPoints: false,
-    editMode: true,
+    editMode: false,
+    editPreviewTier: 8,
     progressDisplayMode: 3,
     showTierName: false,
     positionXPercent: 100,
@@ -208,7 +210,8 @@ function App() {
         let actualTier = 0;
         let actualPoints = 0;
         let actualPointsRequired = 100;
-        let renderedHitValue = 0;
+        let actualTotalPoints = 0;
+        const hasActiveCombo = () => actualTier > 0 || actualPoints > 0;
         let renderedTier = 0;
         let renderedProgress = 0;
         let targetProgress = 0;
@@ -525,7 +528,7 @@ function App() {
         };
 
         const assetPreloadChanged = () => {
-            if (renderedHitValue > 0 || config.editMode) {
+            if (hasActiveCombo() || config.editMode) {
                 styleDirty = true;
                 applyTierStyle();
                 renderComboNumber();
@@ -822,7 +825,6 @@ function App() {
         const hasActiveMessages = () => messages.some((message) => message.active);
 
         const clearCombo = () => {
-            renderedHitValue = 0;
             renderedTier = 0;
             renderedProgress = 0;
             targetProgress = 0;
@@ -840,7 +842,6 @@ function App() {
         const renderCombo = (hitValue: number, tierValue: number, comboPoints: number, pointsRequired: number, totalComboPoints = comboPoints) => {
             const nextTier = clamp(tierValue, 0, ranks.length - 1);
             const tierChanged = nextTier !== renderedTier;
-            renderedHitValue = hitValue;
             renderedTier = nextTier;
             targetProgress = clamp(comboPoints / Math.max(1, pointsRequired), 0, 1);
 
@@ -857,10 +858,12 @@ function App() {
         };
 
         const renderEditPreview = () => {
-            if (actualHitValue > 0) {
-                renderCombo(actualHitValue, actualTier, actualPoints, actualPointsRequired);
+            if (config.editMode) {
+                renderCombo(327, config.editPreviewTier, 70, 100);
+            } else if (hasActiveCombo()) {
+                renderCombo(actualHitValue, actualTier, actualPoints, actualPointsRequired, actualTotalPoints);
             } else {
-                renderCombo(327, 8, 70, 100);
+                clearCombo();
             }
         };
 
@@ -929,6 +932,9 @@ function App() {
             next.showComboNumber = parsed.showComboNumber !== false;
             next.showTotalComboPoints = parsed.showTotalComboPoints === true;
             next.editMode = Boolean(parsed.editMode);
+            const previewTier = Number(parsed.editPreviewTier ?? next.editPreviewTier);
+            next.editPreviewTier = Number.isFinite(previewTier)
+                ? clamp(Math.trunc(previewTier), 0, ranks.length - 1) : next.editPreviewTier;
             if (typeof (parsed as any).progressDisplayMode === 'number') {
                 next.progressDisplayMode = clamp(Number((parsed as any).progressDisplayMode), 0, 3);
             } else {
@@ -1047,18 +1053,9 @@ function App() {
                 actualTier = clamp(parseInt(parts[1], 10) || 0, 0, ranks.length - 1);
                 actualPoints = parseInt(parts[2] ?? '0', 10) || 0;
                 actualPointsRequired = Math.max(1, parseInt(parts[3] ?? '100', 10) || 100);
-                const totalComboPoints = parseInt(parts[4] ?? `${actualPoints}`, 10) || actualPoints;
+                actualTotalPoints = parseInt(parts[4] ?? `${actualPoints}`, 10) || actualPoints;
 
-                if (actualHitValue === 0) {
-                    if (config.editMode) {
-                        renderEditPreview();
-                    } else {
-                        clearCombo();
-                    }
-                    return;
-                }
-
-                renderCombo(actualHitValue, actualTier, actualPoints, actualPointsRequired, totalComboPoints);
+                renderEditPreview();
             },
             showComboMessage: (payload: string) => {
                 if (!config.enabled || !config.showFloatingMessages) return;
@@ -1082,7 +1079,7 @@ function App() {
                     positionHud();
                     if (!config.enabled) {
                         clearCombo();
-                    } else if (config.editMode || actualHitValue > 0) {
+                    } else if (config.editMode || hasActiveCombo()) {
                         renderEditPreview();
                     } else {
                         clearCombo();

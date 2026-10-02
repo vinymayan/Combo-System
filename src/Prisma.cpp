@@ -9,6 +9,11 @@ PRISMA_UI_API::IVPrismaUI1* PrismaUI = nullptr;
 static PrismaView view;
 
 namespace {
+    bool viewReady = false;
+    bool comboActive = false;
+    bool timerPaused = false;
+    std::string comboPayload = "0|0|0|100|0";
+
     std::string BuildUISettingsPayload() {
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -26,6 +31,8 @@ namespace {
         writer.Bool(Settings::PlayerUI.showTotalComboPoints);
         writer.Key("editMode");
         writer.Bool(Settings::PlayerUI.editMode);
+        writer.Key("editPreviewTier");
+        writer.Int(Settings::PlayerUI.editPreviewTier);
         writer.Key("progressDisplayMode");
         writer.Int(Settings::PlayerUI.progressDisplayMode);
         writer.Key("showTierName");
@@ -173,13 +180,22 @@ namespace {
     }
 
     void SendUISettingsToPrisma() {
-        if (!PrismaUI || !view) {
+        if (!PrismaUI || !view || !viewReady) {
             return;
         }
 
-        static std::string payload;
-        payload = BuildUISettingsPayload();
+        const auto payload = BuildUISettingsPayload();
         PrismaUI->InteropCall(view, "updateComboUiSettings", payload.c_str());
+    }
+
+    void SendComboToPrisma() {
+        if (!PrismaUI || !view || !viewReady) return;
+        if (Settings::PlayerUI.enabled && (comboActive || Settings::PlayerUI.editMode)) {
+            if (PrismaUI->IsHidden(view)) PrismaUI->Show(view);
+        } else {
+            if (!PrismaUI->IsHidden(view)) PrismaUI->Hide(view);
+        }
+        PrismaUI->InteropCall(view, "updateComboMeter", comboPayload.c_str());
     }
 }
 
@@ -205,7 +221,7 @@ void Prisma::Show() {
     if (!PrismaUI) return;
 
     if (!createdView) {
-        createdView = true;
+        viewReady = false;
 
 #ifdef DEV_SERVER
         constexpr const char* path = "http://localhost:5173";
@@ -217,8 +233,15 @@ void Prisma::Show() {
 
         // 1. Cria a View e armazena o handle válido na variável 'view'
         view = PrismaUI->CreateView(path, [](PrismaView viewHandle) -> void {
-            SKSE::log::debug("Prisma::Show - View pronta (DOM Ready). Removendo foco de input.");
+            SKSE::GetTaskInterface()->AddTask([viewHandle]() {
+                if (!PrismaUI || view != viewHandle) return;
+                viewReady = true;
+                SKSE::log::debug("Prisma::Show - View pronta (DOM Ready). Sincronizando estado.");
+                Prisma::ApplyUISettings();
+                Prisma::SetTimerPaused(timerPaused);
             });
+            });
+        createdView = view != 0;
 
         // 2. CORREÇÃO: Regista os Listeners AGORA, pois a 'view' já possui um ID real e válido!
         if (PrismaUI && view) {
@@ -253,22 +276,10 @@ void Prisma::Hide() {
 bool Prisma::IsHidden() { return !PrismaUI || !view || PrismaUI->IsHidden(view); }
 
 void Prisma::UpdateCombo(int hitValue, int comboValue, int tierComboPoints, int pointsPerTier, int totalComboPoints) {
-    if (!PrismaUI || !view) return;
-    if (!Settings::PlayerUI.enabled) {
-        if (!PrismaUI->IsHidden(view)) {
-            PrismaUI->Hide(view);
-        }
-        return;
-    }
-
-    if (hitValue > 0 && PrismaUI->IsHidden(view)) {
-        PrismaUI->Show(view);
-    }
-
-    static std::string payload;
-    payload = std::to_string(hitValue) + "|" + std::to_string(comboValue) + "|" + std::to_string(tierComboPoints) + "|" + std::to_string(pointsPerTier) + "|" + std::to_string(totalComboPoints);
+    comboActive = comboValue > 0 || tierComboPoints > 0;
+    comboPayload = std::to_string(hitValue) + "|" + std::to_string(comboValue) + "|" + std::to_string(tierComboPoints) + "|" + std::to_string(pointsPerTier) + "|" + std::to_string(totalComboPoints);
     try {
-        PrismaUI->InteropCall(view, "updateComboMeter", payload.c_str());
+        SendComboToPrisma();
     }
     catch (const std::exception& e) {
         SKSE::log::error("Prisma::UpdateCombo - Erro capturado na execucao: {}", e.what());
@@ -279,28 +290,21 @@ void Prisma::UpdateCombo(int hitValue, int comboValue, int tierComboPoints, int 
 }
 
 void Prisma::ShowComboMessage(const std::string& label, int pointsDelta) {
-    if (!PrismaUI || !view || pointsDelta == 0) return;
+    if (!PrismaUI || !view || !viewReady || pointsDelta == 0) return;
     if (!Settings::PlayerUI.enabled) return;
     if (!Settings::PlayerUI.showFloatingMessages) return;
+    if (!comboActive && !Settings::PlayerUI.editMode) return;
 
     if (PrismaUI->IsHidden(view)) {
         PrismaUI->Show(view);
     }
 
-    static std::string payload;
-    payload = label + "|" + std::to_string(pointsDelta);
+    const auto payload = label + "|" + std::to_string(pointsDelta);
     PrismaUI->InteropCall(view, "showComboMessage", payload.c_str());
 }
 
 void Prisma::ApplyUISettings() {
     if (!PrismaUI) {
-        return;
-    }
-
-    if (!Settings::PlayerUI.enabled) {
-        if (view && !PrismaUI->IsHidden(view)) {
-            PrismaUI->Hide(view);
-        }
         return;
     }
 
@@ -312,11 +316,9 @@ void Prisma::ApplyUISettings() {
         }
     }
 
-    if (Settings::PlayerUI.editMode && PrismaUI->IsHidden(view)) {
-        PrismaUI->Show(view);
-    }
-
+    if (!viewReady) return;
     SendUISettingsToPrisma();
+    SendComboToPrisma();
 }
 
 void Prisma::ResetComboDisplay() {
@@ -324,7 +326,8 @@ void Prisma::ResetComboDisplay() {
 }
 
 void Prisma::SetTimerPaused(bool paused) {
-    if (PrismaUI && view) {
+    timerPaused = paused;
+    if (PrismaUI && view && viewReady) {
         const char* payload = paused ? "true" : "false";
         PrismaUI->InteropCall(view, "setComboTimerPaused", payload);
     }

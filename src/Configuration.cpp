@@ -277,6 +277,7 @@ namespace ModMenu {
     }
 
     static void ClampPlayerUISettings(Settings::PlayerUISettings& settings) {
+        settings.editPreviewTier = std::clamp(settings.editPreviewTier, 0, Settings::kComboTierCount - 1);
         settings.positionXPercent = std::clamp(settings.positionXPercent, 0, 100);
         settings.positionYPercent = std::clamp(settings.positionYPercent, 0, 100);
         settings.scalePercent = std::clamp(settings.scalePercent, 40, 300);
@@ -345,6 +346,9 @@ namespace ModMenu {
         }
         if (parent.HasMember("editMode") && parent["editMode"].IsBool()) {
             settings.editMode = parent["editMode"].GetBool();
+        }
+        if (parent.HasMember("editPreviewTier") && parent["editPreviewTier"].IsInt()) {
+            settings.editPreviewTier = parent["editPreviewTier"].GetInt();
         }
         if (parent.HasMember("progressDisplayMode") && parent["progressDisplayMode"].IsInt()) {
             settings.progressDisplayMode = parent["progressDisplayMode"].GetInt();
@@ -542,6 +546,7 @@ namespace ModMenu {
         parent.AddMember("showComboNumber", settings.showComboNumber, alloc);
         parent.AddMember("showTotalComboPoints", settings.showTotalComboPoints, alloc);
         parent.AddMember("editMode", settings.editMode, alloc);
+        parent.AddMember("editPreviewTier", settings.editPreviewTier, alloc);
         parent.AddMember("progressDisplayMode", settings.progressDisplayMode, alloc);
         parent.AddMember("showTierName", settings.showTierName, alloc);
         parent.AddMember("positionXPercent", settings.positionXPercent, alloc);
@@ -821,6 +826,11 @@ namespace ModMenu {
                 return changed;
             }
             if (ImGui::Checkbox(GetLoc("menu.ui_edit_mode", "Combo UI edit mode"), &ui.editMode)) changed = true;
+            if (ui.editMode) {
+                ui.editPreviewTier = std::clamp(ui.editPreviewTier, 0, Settings::kComboTierCount - 1);
+                if (ImGui::Combo(GetLoc("menu.ui_edit_preview_tier", "Editor preview tier"), &ui.editPreviewTier,
+                    Settings::ComboTierNames, Settings::kComboTierCount)) changed = true;
+            }
             if (ImGui::Checkbox(GetLoc("menu.show_combo_number", "Show combo number"), &ui.showComboNumber)) changed = true;
             if (ImGui::Checkbox(GetLoc("menu.show_total_combo_points", "Show total combo points"), &ui.showTotalComboPoints)) changed = true;
             if (ImGui::Checkbox(GetLoc("menu.show_tier_name", "Show tier name text"), &ui.showTierName)) changed = true;
@@ -1097,6 +1107,9 @@ namespace ModMenu {
         std::ofstream file(path, std::ios::binary);
         if (file.is_open()) {
             file << buffer.GetString();
+            if (!file) logger::warn("Combo System settings file could not be written: {}", path);
+        } else {
+            logger::warn("Combo System settings file could not be opened for writing: {}", path);
         }
     }
 
@@ -1154,7 +1167,7 @@ namespace ModMenu {
     }
 
     void SaveSettings() {
-        std::filesystem::create_directories("Data/SKSE/Plugins/ComboSystem");
+        std::filesystem::create_directories(std::filesystem::path(UI_SETTINGS_PATH).parent_path());
 
         rapidjson::Document playerDoc;
         playerDoc.SetObject();
@@ -1194,7 +1207,9 @@ namespace ModMenu {
     void UIRender() {
         if (RenderPlayerUISettings()) {
             SaveSettings();
-            Prisma::ApplyUISettings();
+            SKSE::GetTaskInterface()->AddTask([]() {
+                Prisma::ApplyUISettings();
+            });
         }
     }
 
